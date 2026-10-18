@@ -1,0 +1,54 @@
+# BmcWar - wars by the clock. Everything about cities, wars, sides and players comes from the site.
+
+site:
+  # The file the site publishes (cities with their land from the SVG, wars, who is in which country).
+  url: https://bmcmc.online/gaia/territories.json
+  refresh-minutes: 5
+
+# The Minecraft world the wars are fought in, and the dynmap world its markers are in.
+world: world
+dynmap:
+  world: world
+
+# Which wars to run (their ids in the site's diplomacy.json). Empty = every war marked "live": true that has not ended.
+wars: []
+
+capture:
+  # How long (SECONDS) a side must stay inside a city's land to take it, by the city's type.
+  # Rule: a city (Small / Medium / Large, capitals included) takes 30 s, a Fort 15 s, everything else is taken the moment
+  # an attacker is inside with no opponent there (0).
+  seconds:
+    Locality: 0
+    Colonial: 0
+    Fort: 15
+    Small: 30
+    Medium: 30
+    Large: 30
+  default-seconds: 0
+  # A capital takes this many times as long as its type says.
+  capital-multiplier: 1
+  # Someone of the side that holds the city inside it is resistance: the city shows as contested.
+  # pause = the timer stops while an opponent is inside and goes on from where it was when he leaves;
+  # reset = the time starts over when the resistance ends.
+  on-resistance: pause
+  # Seconds the attackers may be out of the city before the attempt is dropped (0 = dropped the moment they leave).
+  grace-seconds: 0
+  # Seconds after a city is taken during which it cannot be taken again (0 = no cooldown).
+  cooldown-seconds: 0
+  # Players of a side that must be inside for the time to run.
+  min-attackers: 1
+  # Players who are flying (fly mode) or gliding (elytra) do not count, neither as attackers nor as resistance.
+  ignore-flying: true
+  # Players riding a vehicle (the planes of MTVehicles, boats, anything they sit in) with only air in this many blocks under
+  # them do not count either. A vehicle on the ground still counts. 0 = vehicles are never ignored.
+  ignore-vehicle-above-blocks: 3
+  # A city with no outline on the site gets a round area of this radius (blocks).
+  fallback-radius: 40
+
+announce:
+  start: true
+  contested: true
+  captured: true
+  aborted: false
+  # Show the time left above the hotbar to the players inside the city.
+  actionbar: true

@@ -1,0 +1,21 @@
+name: BmcWar
+version: ${version}
+main: com.cumania.war.BmcWarPlugin
+api-version: "1.21"
+description: Wars by the clock - a side that holds a city's land for its time takes it, and dynmap shows the new colour.
+softdepend: [dynmap]
+commands:
+  bmcwar:
+    description: Status of the wars, and staff tools
+    usage: /bmcwar status | where | set <city> <state> | reload
+    permission: bmcwar.use
+permissions:
+  bmcwar.use:
+    description: See the status of captures and where you stand
+    default: true
+  bmcwar.admin:
+    description: Set a city's colour by hand and reload the plugin
+    default: op
+  bmcwar.bypass:
+    description: Not counted when standing in a city (for staff watching a capture)
+    default: false

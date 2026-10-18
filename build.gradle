@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.cumania'
+version = project.property('plugin_version')
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url = 'https://repo.mikeprimm.com/' }
+}
+
+dependencies {
+    // The server provides these at run time. If the versions are not found, look the current ones up at
+    // https://papermc.io/downloads (paper-api) and https://repo.mikeprimm.com/us/dynmap/dynmap-api/ (dynmap-api).
+    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
+    compileOnly 'us.dynmap:dynmap-api:3.7-beta-6'
+    compileOnly 'us.dynmap:DynmapCoreAPI:3.7-beta-6'   // org.dynmap.markers lives here
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+tasks.processResources {
+    inputs.property 'version', project.version
+    filesMatching('plugin.yml') { expand(version: project.version) }
+}
+
+tasks.jar {
+    archiveBaseName = 'BmcWar'
+}
