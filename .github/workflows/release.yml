@@ -1,45 +1,45 @@
-# Attaches the compiled jar to a GitHub Release.
-# Publish a release on GitHub (Releases > Draft a new release, tag v<plugin_version>, e.g. v0.1.0), and this builds
-# the plugin and uploads build/libs/BmcWar-<version>.jar to it. It can also be run by hand (Actions > Release > Run workflow)
-# for a release that already exists.
-# The tag must match plugin_version in gradle.properties (v + version).
+# Publishes a GitHub Release with the compiled jar, named after plugin_version in gradle.properties (v0.1.0, ...).
+# It runs when gradle.properties changes on main (bump the version to release), or by hand: Actions > Release > Run workflow.
+# If the release for that version already exists, nothing is done.
 name: Release
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths: [gradle.properties]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag to attach the jar to (e.g. v0.1.0)
-        required: true
 permissions:
   contents: write
 jobs:
-  jar:
+  release:
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - uses: actions/setup-java@v4
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          tag="v$(grep '^plugin_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists: nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.v.outputs.exists != 'true'
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew
-      - name: Check the tag matches the version
+      - if: steps.v.outputs.exists != 'true'
+        uses: gradle/actions/setup-gradle@v4
+      - if: steps.v.outputs.exists != 'true'
+        run: chmod +x gradlew && ./gradlew build --no-daemon
+      - if: steps.v.outputs.exists != 'true'
+        name: Create the release
         shell: bash
         run: |
-          version=$(grep '^plugin_version=' gradle.properties | cut -d= -f2)
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error title=Version mismatch::tag $TAG but gradle.properties says plugin_version=$version"
-            exit 1
-          fi
-      - run: ./gradlew build --no-daemon
-      - name: Upload the jar to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: gh release upload "$TAG" build/libs/BmcWar-*.jar --clobber
+          gh release create "${{ steps.v.outputs.tag }}" build/libs/BmcWar-*.jar \
+            --target "$GITHUB_SHA" \
+            --title "BmcWar ${{ steps.v.outputs.tag }}" \
+            --notes-file .github/release-notes.md
