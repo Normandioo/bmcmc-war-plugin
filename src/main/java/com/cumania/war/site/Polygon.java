@@ -2,7 +2,7 @@ package com.cumania.war.site;
 
 import java.util.List;
 
-/** A city's land: the province outline the site draws in its SVG, in blocks. Several rings are combined the even-odd way (holes work). */
+/** A city's land: its capture limit or province outline from the site's SVGs, in blocks. Several rings are combined the even-odd way (holes work). */
 public final class Polygon {
     private final List<int[]> rings;
     public final int minX, minZ, maxX, maxZ;

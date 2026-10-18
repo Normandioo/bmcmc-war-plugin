@@ -20,6 +20,14 @@ public final class TerritoryFile {
     public Map<String, Player> players;
     /** Optional (mod 1.4+): wars, alliances and diplomatic timers, as the site works them out. */
     public WarData war;
+    /** Optional: cities' capture limits drawn in the site's capture SVG (captureFile), in place of the province around them. */
+    public List<Zone> zones;
+
+    /** A city's capture limit: name + country as in localities; rings like a province's (even-odd). */
+    public static final class Zone {
+        public String name, country;
+        public List<int[]> rings;
+    }
 
     public static final class WarData {
         public List<WarInfo> wars;

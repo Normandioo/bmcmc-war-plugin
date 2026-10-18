@@ -42,7 +42,8 @@ capture:
   # Players riding a vehicle (the planes of MTVehicles, boats, anything they sit in) with only air in this many blocks under
   # them do not count either. A vehicle on the ground still counts. 0 = vehicles are never ignored.
   ignore-vehicle-above-blocks: 3
-  # A city with no outline on the site gets a round area of this radius (blocks).
+  # A city's land is its capture limit (the site's capture.svg), else the province its marker is in.
+  # A city with neither gets a round area of this radius (blocks).
   fallback-radius: 40
 
 announce:

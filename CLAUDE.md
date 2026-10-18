@@ -20,6 +20,7 @@ Plugin **Paper 1.21.11 (Java 21)** que automatiza a captura de cidades nas guerr
 Chaves: `format, world, dimension, generated, countries, provinces, localities, players, war`.
 - `localities` (356): nome, país, `kind` (Locality, Colonial, Fort, Small, Medium, Large, e "...Capital"), x, z.
 - `provinces` (356): polígonos em **coordenadas de bloco** (anéis, regra par-ímpar). Cada cidade é a província em que o marcador dela cai: 355/356 caem em exatamente uma; a que não tem recebe um círculo (`capture.fallback-radius`, 40).
+- `zones` (opcional): **limites de captura** desenhados no `gaia/capture.svg` do site (`captureFile` no `timeline-config.json`), `{name, country, rings}`. Quando uma cidade tem zone, ela substitui a província (`SiteData.Limit` = ZONE / PROVINCE / CIRCLE; `City.limit()`). Feito pelo Enrico em outra conversa: no site, exportador + `js/capture.js` (contornos no mapa) na branch `capture-limits` do Cumania; aqui, `SiteData`, `TerritoryFile`, `Polygon` (comentário) e `tools/export_territories.py`. O exportador avisa e pula limite inválido (curva, sem cidade, sobreposição, viewBox diferente) em vez de parar.
 - `players`: `ign` (nick do jogo) → nome no site; `countries[].population` lista os jogadores de cada país. Lado do jogador = nick → nome no site → país → lado da guerra (`SiteData.sideOfPlayer`).
 - `war.wars[]`: `id, name, live, ended, sides[] {name, members[] {name, countries[]}}, captured[]`. Um membro pode ter nome diferente do país (ex.: "Eleyetia" cobre USE e Mesea; "RedIce" cobre Iceland), então `sideOfCountry` casa também pelo nome do membro.
 - Guerra ao vivo = `"live": true` no `diplomacy.json` do site. Com `wars: []` no config, o plugin roda toda guerra ao vivo que não terminou.
@@ -54,7 +55,7 @@ Chaves: `format, world, dimension, generated, countries, provinces, localities, 
   javac -d out -cp gson.jar $(find src/main/java/com/cumania/war/site src/main/java/com/cumania/war/engine -name '*.java') test/EngineCheck.java
   java -cp out:gson.jar EngineCheck docs/territories-sample.json
   ```
-  Os casos 1–6 usam os **valores antigos em minutos × 60** (600, 900...); os casos 7–10 (cidade neutra, cidade de 0 s, marcador ausente, `clear()`) usam a regra atual do `config.yml`. A checagem da LombriganWar só exige que ela exista com dois lados (no exemplo ela está `live=false`). Estado atual: 26/26 ok. No sandbox, o Gson está em `/opt/apache-maven-*/lib/gson-*.jar`.
+  Os casos 1–6 usam os **valores antigos em minutos × 60** (600, 900...); os casos 7–10 (cidade neutra, cidade de 0 s, marcador ausente, `clear()`) usam a regra atual do `config.yml`. A checagem da LombriganWar só exige que ela exista com dois lados (no exemplo ela está `live=false`). Caso 11: limite de captura (`zones`). Estado atual: 29/29 ok. No sandbox, o Gson está em `/opt/apache-maven-*/lib/gson-*.jar`.
 - `test/DynmapCheck.java` testa o adaptador com marcadores falsos (precisa do `dynmap-api` no classpath).
 
 ## O que NUNCA foi verificado (fazer primeiro num servidor de teste)

@@ -132,6 +132,21 @@ public class EngineCheck {
         eng.clear();
         check(icons.get(small.key()) == Markers.NONE && eng.statusOf(war, small) == null, "after clear() (shutdown / reload) the icon is back to how it was");
 
+        // 11. a capture limit drawn on the site (zones) replaces the province, for that city only
+        var json = com.google.gson.JsonParser.parseString(Files.readString(Path.of(args[0]))).getAsJsonObject();
+        var zone = new com.google.gson.JsonObject();
+        zone.addProperty("name", small.name()); zone.addProperty("country", small.country());
+        var rings = new com.google.gson.JsonArray(); var ring = new com.google.gson.JsonArray();
+        for (int v : new int[]{small.x() - 5, small.z() - 5, small.x() + 5, small.z() - 5, small.x() + 5, small.z() + 5, small.x() - 5, small.z() + 5}) ring.add(v);
+        rings.add(ring); zone.add("rings", rings);
+        var zones = new com.google.gson.JsonArray(); zones.add(zone); json.add("zones", zones);
+        SiteData zoned = SiteData.parse(json.toString(), 40);
+        SiteData.City zc = zoned.cities().stream().filter(c -> c.key().equals(small.key())).findFirst().orElse(null);
+        check(zc != null && zc.limit() == SiteData.Limit.ZONE && zc.area().contains(small.x(), small.z()) && !zc.area().contains(small.x() + 20, small.z()),
+                "a drawn capture limit is used for " + small.name() + " (10x10 square)");
+        check(zoned.cities().stream().filter(c -> c.limit() == SiteData.Limit.PROVINCE).count() == own - 1, "every other city keeps its province");
+        check(site.cities().stream().noneMatch(c -> c.limit() == SiteData.Limit.ZONE), "without zones in the file nothing changes");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """Exports a world's territories from its latest.svg to <world>/territories.json,
 in Minecraft block coordinates, for the Xaero's addon mod. Besides the shapes it carries each
 country's panel data (type, leader, government, ethnicity, population, diplomacy) and the
@@ -17,7 +16,7 @@ Only straight-line paths (M L H V Z, absolute or relative) are supported, which
 is all the territory paths use; anything else stops the export with an error
 instead of producing wrong shapes.
 """
-import argparse, base64, collections, datetime, json, re, sys, urllib.request
+import argparse, base64, collections, datetime, json, math, re, sys, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -90,6 +89,115 @@ def walk(el, tx, ty, tags=('path',)):
             yield child, tx + dx, ty + dy
         elif child.tag == SVG + 'g':
             yield from walk(child, tx + dx, ty + dy, tags)
+
+
+INKSCAPE_LABEL = '{http://www.inkscape.org/namespaces/inkscape}label'
+ZONE_ID = re.compile(r'zone__(.+?)-lp-(.+?)-rp-.*')
+ZONE_LABEL = re.compile(r'\s*(.+?)\s*\(\s*(.+?)\s*\)\s*')
+
+
+def zone_shapes(el, tx, ty, warn):
+    """The capture-limit SVG: every path, polygon, rect, circle or ellipse with its translation. Unlike the
+    territory SVG, a shape that cannot be read is skipped with a warning instead of stopping the export."""
+    for child in el:
+        try:
+            dx, dy = translation(child.get('transform'))
+        except ValueError as e:
+            warn(f'{child.get("id") or child.tag}: {e} (skipped)'); continue
+        tag = child.tag[len(SVG):] if child.tag.startswith(SVG) else child.tag
+        if tag in ('path', 'polygon', 'rect', 'circle', 'ellipse'):
+            yield child, tag, tx + dx, ty + dy
+        elif tag == 'g':
+            yield from zone_shapes(child, tx + dx, ty + dy, warn)
+
+
+def zone_rings(el, tag):
+    """One capture-limit shape -> rings in SVG units. Circles and ellipses become 32-sided polygons."""
+    if tag == 'path':
+        return parse_path(el.get('d', ''))
+    if tag == 'polygon':
+        v = [float(n) for n in re.findall(r'-?\d*\.?\d+(?:[eE][-+]?\d+)?', el.get('points', ''))]
+        return [list(zip(v[0::2], v[1::2]))]
+    if tag == 'rect':
+        x, y, w, h = (float(el.get(k, 0)) for k in ('x', 'y', 'width', 'height'))
+        return [[(x, y), (x + w, y), (x + w, y + h), (x, y + h)]]
+    cx, cy = float(el.get('cx', 0)), float(el.get('cy', 0))
+    rx = float(el.get('r') if tag == 'circle' else el.get('rx', 0))
+    ry = float(el.get('r') if tag == 'circle' else el.get('ry', 0))
+    return [[(cx + rx * math.cos(2 * math.pi * i / 32), cy + ry * math.sin(2 * math.pi * i / 32)) for i in range(32)]]
+
+
+def inside(rings, x, z):
+    """Even-odd point-in-polygon over flat rings [x0, z0, x1, z1, ...], like the plugin's Polygon."""
+    hit = False
+    for r in rings:
+        n = len(r) // 2
+        for i in range(n):
+            j = (i - 1) % n
+            xi, zi, xj, zj = r[2 * i], r[2 * i + 1], r[2 * j], r[2 * j + 1]
+            if (zi > z) != (zj > z) and x < (xj - xi) * (z - zi) / (zj - zi) + xi: hit = not hit
+    return hit
+
+
+def capture_zones(svg_path, to_block, localities, expected_vb):
+    """Each city's capture limit from the capture SVG, in blocks: [{name, country, rings}]. A shape is tied to a
+    city by its id "zone__Name-lp-Country-rp-" (like the markers) or its Inkscape label "Name(Country)".
+    Several shapes for the same city are combined (even-odd, so a shape inside another is a hole).
+    The SVG must have the territory SVG's viewBox, or every limit would land in the wrong place."""
+    try:
+        tree = ET.parse(svg_path).getroot()
+        vb = [float(v) for v in (tree.get('viewBox') or '').replace(',', ' ').split()]
+    except (ET.ParseError, ValueError) as e:
+        print(f'  capture limits: {svg_path} cannot be read ({e}); no capture limits exported')
+        return []
+    if vb != expected_vb:
+        print(f'  capture limits: {svg_path} has viewBox {vb}, not {expected_vb} like the territory SVG; no capture limits exported')
+        return []
+    by_key = {(plain(l['name']), l['country']): l for l in localities}
+    zones, warnings = {}, []
+    warn = warnings.append
+    for el, tag, tx, ty in zone_shapes(tree, 0.0, 0.0, warn):
+        ident = el.get('id') or ''
+        m = ZONE_ID.fullmatch(ident) or ZONE_LABEL.fullmatch(el.get(INKSCAPE_LABEL) or '')
+        if not m:
+            warn(f'{ident or tag}: not tied to a city (id "zone__Name-lp-Country-rp-" or label "Name(Country)"), skipped'); continue
+        loc = by_key.get((plain(m.group(1)), m.group(2)))
+        if not loc:
+            warn(f'{ident}: no locality {m.group(1)}({m.group(2)}) on the map, skipped'); continue
+        try:
+            rings = zone_rings(el, tag)
+        except (ValueError, TypeError) as e:
+            warn(f'{ident}: {e} (draw it with straight lines only), skipped'); continue
+        flat = []
+        for ring in rings:
+            pts = [to_block(px + tx, py + ty) for px, py in ring]
+            if len(pts) > 1 and pts[0] == pts[-1]: pts.pop()
+            if len(pts) >= 3: flat.append([v for p in pts for v in p])
+        if not flat:
+            warn(f'{ident}: has no area, skipped'); continue
+        key = (loc['name'], loc['country'])
+        zones.setdefault(key, {'name': loc['name'], 'country': loc['country'], 'rings': []})['rings'].extend(flat)
+
+    out = list(zones.values())
+    for z in out:
+        loc = by_key[(plain(z['name']), z['country'])]
+        if not inside(z['rings'], loc['x'] + 0.5, loc['z'] + 0.5):
+            warn(f'{z["name"]}({z["country"]}): its marker is outside its own capture limit')
+    # two limits that share ground: someone standing there counts for both cities
+    def box(z):
+        xs = [v for r in z['rings'] for v in r[0::2]]; zs = [v for r in z['rings'] for v in r[1::2]]
+        return min(xs), min(zs), max(xs), max(zs)
+    boxes = [box(z) for z in out]
+    for i in range(len(out)):
+        for j in range(i + 1, len(out)):
+            a, b = boxes[i], boxes[j]
+            if a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1]: continue
+            pa = [(r[k], r[k + 1]) for r in out[i]['rings'] for k in range(0, len(r), 2)]
+            pb = [(r[k], r[k + 1]) for r in out[j]['rings'] for k in range(0, len(r), 2)]
+            if any(inside(out[j]['rings'], x, z) for x, z in pa) or any(inside(out[i]['rings'], x, z) for x, z in pb):
+                warn(f'{out[i]["name"]}({out[i]["country"]}) and {out[j]["name"]}({out[j]["country"]}): their capture limits overlap')
+    for w in warnings: print(f'  capture limits: {w}')
+    return out
 
 
 def as_list(value):
@@ -503,6 +611,14 @@ def main():
         if value.get('designations'): entry['designations'] = [str(d) for d in value['designations']]
         localities.append(entry)
 
+    # Capture limits (optional "captureFile"): the land a side must hold to take a city in a live war (the BmcWar
+    # server plugin). A city with no limit drawn there keeps the province its marker stands in.
+    zones = []
+    if cfg.get('captureFile'):
+        capture_path = root / cfg['captureFile']
+        if capture_path.exists(): zones = capture_zones(capture_path, to_block, localities, vb)
+        else: print(f'  capture limits: {capture_path} not found; none exported')
+
     # Players behind the countries' populations: the site's own records and their skins
     people = list(dict.fromkeys(n for c in countries.values() for n in c.get('population', [])))
     players_file = load_json(root / cfg['playersFile']) if cfg.get('playersFile') else {}
@@ -518,6 +634,7 @@ def main():
         'generated': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'countries': countries, 'provinces': provinces, 'localities': localities,
     }
+    if zones: out['zones'] = zones
     if players: out['players'] = players
     if war['wars'] or war['alliances'] or war['truces'] or war['ultimatums'] or war['naps'] or war['locks']: out['war'] = war
     target = Path(args.out) if args.out else root / Path(cfg['latestFile']).parent / 'territories.json'
@@ -532,7 +649,7 @@ def main():
             pass
     target.write_text(json.dumps(out, separators=(',', ':'), ensure_ascii=False), encoding='utf8')
     print(f'{target}: {len(provinces)} provinces, {len(countries)} countries, '
-          f'{len(localities)} localities, {target.stat().st_size / 1024:.0f} KB ({skipped} non-territory paths ignored)')
+          f'{len(localities)} localities, {len(zones)} capture limits, {target.stat().st_size / 1024:.0f} KB ({skipped} non-territory paths ignored)')
 
 
 if __name__ == '__main__':

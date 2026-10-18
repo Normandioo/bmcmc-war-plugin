@@ -12,8 +12,13 @@ import java.util.Map;
  * No Minecraft classes in here.
  */
 public final class SiteData {
-    /** key = "name(country)" in lower case, the same key the site and the mod use. area = the city's province outline. */
-    public record City(String key, String name, String country, String kind, int x, int z, Polygon area, boolean ownOutline) {
+    /** Where a city's land comes from: its own capture limit (the site's capture SVG), the province its marker stands in, or a round area. */
+    public enum Limit { ZONE, PROVINCE, CIRCLE }
+
+    /** key = "name(country)" in lower case, the same key the site and the mod use. area = the city's land (see {@link Limit}). */
+    public record City(String key, String name, String country, String kind, int x, int z, Polygon area, Limit limit) {
+        /** True when the land was drawn on the site (a capture limit or a province), false for the round fallback. */
+        public boolean ownOutline() { return limit != Limit.CIRCLE; }
         public boolean capital() { return kind != null && kind.endsWith("Capital"); }
         /** Small, Medium, Large, Locality, Fort, Colonial (a "...Capital" kind counts as its base). */
         public String baseKind() { return kind == null ? "Locality" : capital() ? kind.substring(0, kind.length() - "Capital".length()) : kind; }
@@ -45,11 +50,20 @@ public final class SiteData {
         List<Polygon> outlines = new ArrayList<>();
         for (TerritoryFile.Province p : provinces) outlines.add(new Polygon(p.rings == null ? List.of() : p.rings));
 
+        Map<String, Polygon> zones = new HashMap<>();   // capture limits drawn for the city itself
+        if (file.zones != null) for (TerritoryFile.Zone z : file.zones) {
+            if (z == null || z.name == null || z.country == null || z.rings == null || z.rings.isEmpty()) continue;
+            zones.put(key(z.name, z.country), new Polygon(z.rings));
+        }
+
         List<City> cities = new ArrayList<>();
         if (file.localities != null) for (TerritoryFile.Locality l : file.localities) {
+            String k = key(l.name, l.country);
+            Polygon zone = zones.get(k);
+            if (zone != null) { cities.add(new City(k, l.name, l.country, l.kind, l.x, l.z, zone, Limit.ZONE)); continue; }
             Polygon own = null;
-            for (Polygon p : outlines) if (p.contains(l.x, l.z)) { own = p; break; }   // the province the city stands in is its land
-            cities.add(new City(key(l.name, l.country), l.name, l.country, l.kind, l.x, l.z, own != null ? own : Polygon.circle(l.x, l.z, fallbackRadius), own != null));
+            for (Polygon p : outlines) if (p.contains(l.x, l.z)) { own = p; break; }   // otherwise the province the city stands in is its land
+            cities.add(new City(k, l.name, l.country, l.kind, l.x, l.z, own != null ? own : Polygon.circle(l.x, l.z, fallbackRadius), own != null ? Limit.PROVINCE : Limit.CIRCLE));
         }
 
         List<War> wars = new ArrayList<>();

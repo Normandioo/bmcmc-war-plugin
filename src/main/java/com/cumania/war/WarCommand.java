@@ -73,7 +73,11 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         var loc = p.getLocation();
         for (SiteData.City city : site.cities()) {
             if (!city.area().contains(loc.getX(), loc.getZ())) continue;
-            say(sender, "You are in " + city.name() + " (" + city.country() + "), a " + city.kind() + (city.ownOutline() ? "" : " (no outline on the site: a round area is used)") + ".", NamedTextColor.WHITE);
+            say(sender, "You are in " + city.name() + " (" + city.country() + "), a " + city.kind() + (switch (city.limit()) {
+                case ZONE -> " (inside its capture limit)";
+                case PROVINCE -> "";
+                case CIRCLE -> " (no outline on the site: a round area is used)";
+            }) + ".", NamedTextColor.WHITE);
             for (SiteData.War war : plugin.handledWars()) {
                 int mark = plugin.markers().read(war, city), owner = site.sideOfCity(war, city);
                 String holder = mark >= 0 ? war.sides().get(mark).name() : mark == Markers.CONTESTED ? "contested" : mark == Markers.UNCONTROLLED ? "uncontrolled"
