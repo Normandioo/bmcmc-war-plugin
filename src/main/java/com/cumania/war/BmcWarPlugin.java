@@ -55,6 +55,8 @@ public final class BmcWarPlugin extends JavaPlugin {
         cache = getDataFolder().toPath().resolve("territories-cache.json");
         ready = new ReadyCheck(this);
         Bukkit.getPluginManager().registerEvents(ready, this);
+        table = new CapitulationTable(this);
+        Bukkit.getPluginManager().registerEvents(table, this);
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
         if (cmd != null) { cmd.setExecutor(command); cmd.setTabCompleter(command); }
@@ -70,9 +72,12 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     private ReadyCheck ready;
     ReadyCheck ready() { return ready; }
+    private CapitulationTable table;
+    CapitulationTable table() { return table; }
 
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();
+        if (table != null) table.stopAll();
         if (engine != null) engine.clear();   // cities this plugin left contested go back to who held them
     }
 
@@ -315,6 +320,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) announce(e);
             if (getConfig().getBoolean("announce.actionbar", true)) for (var e : who.entrySet()) actionBar(s, war, e.getKey(), e.getValue());
         }
+        if (table != null) table.tick();
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (!debug.contains(p.getUniqueId())) continue;
             String line = countsLine(p);

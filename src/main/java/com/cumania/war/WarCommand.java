@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "debug", "engagement", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | stop [war]] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | stop [war]] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -42,6 +42,11 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "set" -> { if (admin(sender)) set(sender, args); }
             case "reset" -> { if (admin(sender)) reset(sender, args); }
             case "engagement", "eng" -> engagement(sender, args);
+            case "table", "capitulation", "cap" -> {
+                if (!(sender instanceof Player p)) { say(sender, "Only a player can show the table.", NamedTextColor.GRAY); return true; }
+                if (plugin.table().toggle(p)) say(sender, "Capitulation table on (only for you). /bmcwar table again to hide it.", NamedTextColor.GREEN);
+                else say(sender, "Capitulation table off.", NamedTextColor.GRAY);
+            }
             case "debug" -> {
                 if (!(sender instanceof Player p)) { say(sender, "Only a player can use debug.", NamedTextColor.GRAY); return true; }
                 if (plugin.debug.remove(p.getUniqueId())) say(sender, "Debug off.", NamedTextColor.GRAY);
