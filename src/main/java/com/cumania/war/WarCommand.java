@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "engagement", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "debug", "engagement", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | stop [war]] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | stop [war]] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -42,6 +42,11 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "set" -> { if (admin(sender)) set(sender, args); }
             case "reset" -> { if (admin(sender)) reset(sender, args); }
             case "engagement", "eng" -> engagement(sender, args);
+            case "debug" -> {
+                if (!(sender instanceof Player p)) { say(sender, "Only a player can use debug.", NamedTextColor.GRAY); return true; }
+                if (plugin.debug.remove(p.getUniqueId())) say(sender, "Debug off.", NamedTextColor.GRAY);
+                else { plugin.debug.add(p.getUniqueId()); say(sender, "Debug on: above your hotbar you will see, every second, whether you count for captures and why not. /bmcwar debug again to turn it off.", NamedTextColor.GREEN); }
+            }
             case "reload" -> {
                 if (!admin(sender)) return true;
                 plugin.reloadConfig();
@@ -115,6 +120,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         String tag = plugin.countryFromTag(p, site);
         say(sender, "Your country: " + (country == null ? "none (no scoreboard team matches a country on the site)" : country
                 + (tag != null ? " (from your tag)" : " (from the site's population lists)")), NamedTextColor.GRAY);
+        String counts = plugin.countsLine(p);
+        say(sender, counts, counts.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
         int depth = BmcWarPlugin.depthUnderground(p);
         for (SiteData.City city : site.cities()) {
             if (!city.area().contains(loc.getX(), loc.getZ())) continue;

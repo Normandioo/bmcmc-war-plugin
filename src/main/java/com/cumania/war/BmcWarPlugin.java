@@ -147,17 +147,54 @@ public final class BmcWarPlugin extends JavaPlugin {
         return out;
     }
 
-    private boolean eligible(Player p, String world) {
-        if (!p.getWorld().getName().equals(world) || p.isDead()) return false;
+    private boolean eligible(Player p, String world) { return excluded(p, world) == null; }
+
+    /** Since when each player has been flying or gliding without a break (System.currentTimeMillis()). */
+    private final Map<java.util.UUID, Long> airSince = new HashMap<>();
+    /** Players who asked for /bmcwar debug: whether they count is shown above their hotbar every second. */
+    final java.util.Set<java.util.UUID> debug = new java.util.HashSet<>();
+
+    /**
+     * Why this player does not count for captures right now, or null when they do. Jumping, falling or being launched (a wind
+     * charge, a mace) is ordinary fighting and counts; only flying (fly) or gliding (elytra) for more than capture.air-grace-seconds
+     * in a row does not, so an elytra opened by mistake on a jump does not take anyone out of a capture.
+     */
+    String excluded(Player p, String world) {
+        if (!p.getWorld().getName().equals(world)) return "not in the war's world";
+        if (p.isDead()) return "dead";
         GameMode mode = p.getGameMode();
-        if (mode == GameMode.SPECTATOR) return false;
-        if (p.hasPermission("bmcwar.bypass")) return false;
-        // flying (creative flight / fly) or gliding (elytra) players count for nothing, neither as attackers nor as resistance
-        if (getConfig().getBoolean("capture.ignore-flying", true) && (p.isFlying() || p.isGliding())) return false;
+        if (mode == GameMode.SPECTATOR) return "spectator";
+        if (p.hasPermission("bmcwar.bypass")) return "has bmcwar.bypass";
+        if (p.hasMetadata("vanished")) return "vanished";
+        if (getConfig().getBoolean("capture.ignore-flying", true) && (p.isFlying() || p.isGliding())) {
+            long now = System.currentTimeMillis();
+            long since = airSince.computeIfAbsent(p.getUniqueId(), k -> now);
+            double grace = getConfig().getDouble("capture.air-grace-seconds", 3);
+            if (now - since >= grace * 1000) return p.isGliding() ? "gliding (elytra)" : "flying";
+        } else airSince.remove(p.getUniqueId());
         // riding a vehicle (the planes of MTVehicles, for one) high above the ground counts for nothing either
         int air = getConfig().getInt("capture.ignore-vehicle-above-blocks", 3);
-        if (air > 0 && p.isInsideVehicle() && airborne(p, air)) return false;
-        return !p.hasMetadata("vanished");
+        if (air > 0 && p.isInsideVehicle() && airborne(p, air)) return "in a vehicle off the ground";
+        return null;
+    }
+
+    /** For /bmcwar where and /bmcwar debug: whether the player counts now, and why not (including too deep and no side). */
+    String countsLine(Player p) {
+        SiteData s = site;
+        String why = excluded(p, getConfig().getString("world", "world"));
+        if (why == null && s != null && engine != null) {
+            List<SiteData.War> wars = handledWars();
+            if (!wars.isEmpty() && wars.stream().allMatch(w -> sideOf(p, s, w) < 0)) why = "no side in the war (tag: " + (countryFromTag(p, s) == null ? "none" : countryFromTag(p, s)) + ")";
+            if (why == null) {
+                int depth = depthUnderground(p);
+                for (SiteData.City c : s.cities()) {
+                    if (!c.area().contains(p.getLocation().getX(), p.getLocation().getZ())) continue;
+                    if (engine.rules().tooDeep(c, depth)) why = depth + " blocks underground (limit " + engine.rules().maxDepthFor(c) + " here)";
+                    break;
+                }
+            }
+        }
+        return why == null ? "You count for captures." : "You do NOT count: " + why + ".";
     }
 
     /** True when there is nothing but air in the `blocks` blocks under the player (a vehicle on the ground has a block right below it). */
@@ -271,6 +308,12 @@ public final class BmcWarPlugin extends JavaPlugin {
             }
             for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) announce(e);
             if (getConfig().getBoolean("announce.actionbar", true)) for (var e : who.entrySet()) actionBar(s, war, e.getKey(), e.getValue());
+        }
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (!debug.contains(p.getUniqueId())) continue;
+            String line = countsLine(p);
+            p.sendActionBar(Component.text("[BmcWar] " + line + (p.isFlying() ? " (flying)" : p.isGliding() ? " (gliding)" : p.isOnGround() ? "" : " (in the air)"),
+                    line.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
         }
     }
 

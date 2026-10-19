@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.4.1
+- **Jumping, falling, wind charges and maces count as normal.** Flying (fly) or gliding (elytra) only takes a player out of a capture after `capture.air-grace-seconds` (3) in a row, so an elytra opened by mistake when jumping off a tower no longer stops the count.
+- **`/bmcwar debug`**: shows above your hotbar, every second, whether you count for captures and why not. `/bmcwar where` says it too.
+
 ### New in 0.4.0 - the Laws of the Game, Law 7
 - **Times by category (7.8.5-6):** a Settlement (Small, Medium, Large, Colonial) 30 s, a Fort that is not a Settlement 15 s (drawn as a Fort, designated "Fort" on the site, or a non-Settlement capital), anything else at once.
 - **In Play (7.8.1):** only a locality Connected to one held by another side may be captured. The Connections come from the site's map (its exporter now writes them into `territories.json`), through open Bridges and Straits and across neutral land (short circuits), exactly as the site's War mapmode works them out.

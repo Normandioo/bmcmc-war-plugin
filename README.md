@@ -35,6 +35,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 |---|---|---|
 | `/bmcwar status` | Engagement, quantas localidades estão In Play, capturas em andamento e Capitulação | `bmcwar.use` (todos) |
 | `/bmcwar where` | seu país (pela tag), em que cidade você está, se ela está In Play, cercada ou numa Warzone, se pode ser tomada agora e por quê, quem a segura, por quem você luta e se você está fundo demais no subsolo | `bmcwar.use` |
+| `/bmcwar debug` | liga/desliga: mostra acima da hotbar, a cada segundo, se você está contando para as capturas e por que não | `bmcwar.use` |
 | `/bmcwar engagement` | o Engagement em andamento e quanto falta | `bmcwar.use` |
 | `/bmcwar engagement start <strategic\|tactical\|assault\|raid\|free> [war=<id>] [cidades...]` | abre um Engagement (a cidade de uma Warzone traz a Warzone inteira); avisa quando um alvo vai contra o livro (capital num Assault, alvo fora de In Play...) | `bmcwar.admin` |
 | `/bmcwar engagement stop [guerra]` | encerra o Engagement (num Raid, o Fort volta a quem o tinha) | `bmcwar.admin` |
@@ -74,5 +75,5 @@ java -cp out:gson.jar WarCheck docs/territories-network-sample.json
 - Um jogador que está na população de mais de um país conta pelo primeiro que o site lista.
 - Ainda não foi rodado num servidor de verdade: a lógica foi testada com os dados reais, e o código de Paper e dynmap só foi checado contra a API que ele usa. Teste primeiro com uma guerra de teste e a permissão `bmcwar.bypass` na staff.
 
-- **Quem voa não conta:** com `capture.ignore-flying: true` (padrão), jogadores voando (fly) ou planando (elytra) são ignorados, tanto como atacantes quanto como resistência. Também não contam espectadores, mortos, quem tem a permissão `bmcwar.bypass` e quem está com a metadata `vanished`.
+- **Quem voa não conta:** com `capture.ignore-flying: true` (padrão), jogadores voando (fly) ou planando (elytra) por mais de `capture.air-grace-seconds` (3) seguidos são ignorados, tanto como atacantes quanto como resistência. Pular de uma torre, cair, wind charge e mace contam normal. Também não contam espectadores, mortos, quem tem a permissão `bmcwar.bypass` e quem está com a metadata `vanished`.
 - **Aviões (MTVehicles e outros veículos):** quem está sentado num veículo com só ar nos `capture.ignore-vehicle-above-blocks` (3) blocos abaixo também é ignorado. O plugin não depende do MTVehicles: olha se o jogador está montado em algo e longe do chão. Veículo parado ou rodando no chão continua contando. `0` desliga isso.

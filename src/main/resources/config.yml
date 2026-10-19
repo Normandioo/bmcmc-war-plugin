@@ -38,6 +38,9 @@ capture:
   min-attackers: 1
   # Players who are flying (fly mode) or gliding (elytra) do not count, neither as attackers nor as resistance.
   ignore-flying: true
+  # ...but only after this many seconds of flying or gliding in a row. Jumping off a tower, falling, a wind charge or a mace
+  # launch is ordinary fighting and always counts; an elytra opened by mistake on a jump does not take anyone out either.
+  air-grace-seconds: 3
   # Players riding a vehicle (the planes of MTVehicles, boats, anything they sit in) with only air in this many blocks under
   # them do not count either. A vehicle on the ground still counts. 0 = vehicles are never ignored.
   ignore-vehicle-above-blocks: 3
