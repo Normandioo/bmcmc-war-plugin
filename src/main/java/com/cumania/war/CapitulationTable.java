@@ -118,7 +118,7 @@ final class CapitulationTable implements Listener {
                 rows.add(new String[]{c.nation(), String.valueOf(pct), String.valueOf(c.side()), suffix});
             }
             Engagement e = plugin.engine().engagement(war);
-            if (e != null) rows.add(new String[]{e.kind().label + (Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.endsAt() - plugin.engine().clock(war))), "-1", "-2", ""});
+            if (e != null) rows.add(new String[]{e.kind().label + (e.waiting() ? " (waiting)" : Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.endsAt() - plugin.engine().clock(war))), "-1", "-2", ""});
         }
 
         // Rebuilt each second on a fresh objective, then swapped in, so the sidebar does not flicker or keep stale rows

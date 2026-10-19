@@ -30,6 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * When an Engagement starts, everyone fighting in that war is asked on screen (a title, not the chat) whether they are ready, and
  * answers by typing "ready" or "not ready" in the chat. The answer is kept out of the public chat, confirmed on their screen and
  * reported to the staff (bmcwar.admin). Those who have not answered are asked again every few seconds for a while.
+ * With engagement.ready-check.wait-for-all (the default), the Engagement is held until everyone asked has said "ready": nothing is
+ * captured and its clock does not run until then. Those not ready keep being asked; someone who leaves no longer holds it up; the
+ * staff can begin it anyway with /bmcwar engagement go.
  */
 final class ReadyCheck implements Listener {
     private record Asked(String warId, int side, String name) {}
@@ -50,6 +53,15 @@ final class ReadyCheck implements Listener {
     ReadyCheck(BmcWarPlugin plugin) { this.plugin = plugin; }
 
     private boolean enabled() { return plugin.getConfig().getBoolean("engagement.ready-check.enabled", true); }
+
+    /** Whether a new Engagement waits for everyone to be ready before it begins. */
+    boolean holds() { return enabled() && plugin.getConfig().getBoolean("engagement.ready-check.wait-for-all", true); }
+
+    private boolean waiting(String warId) {
+        SiteData.War war = wars.get(warId);
+        Engagement e = war == null ? null : plugin.engine().engagement(war);
+        return e != null && e.waiting();
+    }
 
     /** Asks everyone with a side in this war whether they are ready. */
     void start(SiteData.War war, Engagement e) {
@@ -76,7 +88,7 @@ final class ReadyCheck implements Listener {
         long started = System.currentTimeMillis();
         closesAt.put(war.id(), started + within * 1000);
         reminders.put(war.id(), Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            boolean over = System.currentTimeMillis() - started >= within * 1000;
+            boolean over = !waiting(war.id()) && System.currentTimeMillis() - started >= within * 1000;
             for (Map.Entry<UUID, Asked> p : who.entrySet()) {
                 if (!pending.containsKey(p.getKey())) continue;
                 if (over) { pending.remove(p.getKey()); continue; }
@@ -90,7 +102,44 @@ final class ReadyCheck implements Listener {
                 tellStaff(Component.text("[" + war.name() + "] Ready check closed. ", NamedTextColor.GOLD).append(Component.text(summary(war), NamedTextColor.WHITE)));
             }
         }, every * 20L, every * 20L));
-        tellStaff(Component.text("[" + war.name() + "] Ready check sent to " + who.size() + " player(s).", NamedTextColor.GOLD));
+        tellStaff(Component.text("[" + war.name() + "] Ready check sent to " + who.size() + " player(s)."
+                + (e.waiting() ? " The engagement begins when all of them are ready (/bmcwar engagement go to begin it anyway)." : ""), NamedTextColor.GOLD));
+        if (e.waiting()) checkAll(war);   // nobody of the war online: nothing to wait for
+    }
+
+    /** When everyone still asked has said ready, the waiting Engagement begins. */
+    private void checkAll(SiteData.War war) {
+        if (!waiting(war.id())) return;
+        Map<UUID, Asked> who = asked.get(war.id());
+        Map<UUID, Object[]> got = answers.get(war.id());
+        if (who == null || got == null) return;
+        for (UUID id : who.keySet()) {
+            Object[] a = got.get(id);
+            if (a == null || !(Boolean) a[2]) return;
+        }
+        begin(war, null);
+    }
+
+    /** Begins the waiting Engagement now (forcedBy = the staff member who did it, or null when everyone is ready). False when none is waiting. */
+    boolean begin(SiteData.War war, String forcedBy) {
+        Engagement e = plugin.engine().begin(war);
+        if (e == null) return false;
+        BukkitTask t = reminders.remove(war.id());
+        if (t != null) t.cancel();
+        pending.values().removeIf(a -> a.warId().equals(war.id()));
+        closesAt.put(war.id(), 0L);
+        String why = forcedBy == null ? "Everyone is ready" : "Begun by " + forcedBy;
+        Map<UUID, Asked> who = asked.getOrDefault(war.id(), Map.of());
+        for (UUID id : who.keySet()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || !p.isOnline()) continue;
+            p.showTitle(Title.title(Component.text(e.kind().label + " begins!", NamedTextColor.RED),
+                    Component.text(why, NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofMillis(700))));
+        }
+        plugin.broadcast(war, Component.text(why + ": the " + e.kind().label.toLowerCase(Locale.ROOT) + " begins now"
+                + (e.minutes() > 0 ? " (" + (int) e.minutes() + " min)" : "") + ".", NamedTextColor.GOLD));
+        plugin.getLogger().info("[" + war.id() + "] " + e.kind() + " begun (" + why + ")");
+        return true;
     }
 
     /** The Engagement is over: nothing more to ask. */
@@ -110,17 +159,18 @@ final class ReadyCheck implements Listener {
         reminders.clear(); pending.clear(); asked.clear(); answers.clear(); kinds.clear(); wars.clear(); closesAt.clear();
     }
 
-    /** Someone who leaves is no longer asked, and drops out of the count (the check is about who is online). */
+    /** Someone who leaves is no longer asked, and drops out of the count (the check is about who is online): they no longer hold it up. */
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         pending.remove(id);
-        for (Map.Entry<String, Map<UUID, Asked>> e : asked.entrySet()) {
+        for (Map.Entry<String, Map<UUID, Asked>> e : new ArrayList<>(asked.entrySet())) {
             if (e.getValue().remove(id) == null) continue;
             Map<UUID, Object[]> got = answers.get(e.getKey());
             if (got != null) got.remove(id);
             SiteData.War war = wars.get(e.getKey());
             tellStaff(Component.text("[" + (war == null ? e.getKey() : war.name()) + "] " + event.getPlayer().getName() + " left the server and is out of the ready check.", NamedTextColor.GRAY));
+            if (war != null) Bukkit.getScheduler().runTask(plugin, () -> checkAll(war));
         }
     }
 
@@ -134,7 +184,7 @@ final class ReadyCheck implements Listener {
             if (site == null) return;
             long now = System.currentTimeMillis();
             for (Map.Entry<String, SiteData.War> e : wars.entrySet()) {
-                if (closesAt.getOrDefault(e.getKey(), 0L) <= now) continue;
+                if (!waiting(e.getKey()) && closesAt.getOrDefault(e.getKey(), 0L) <= now) continue;   // while waiting, everyone who comes is asked
                 Map<UUID, Asked> who = asked.get(e.getKey());
                 if (who == null || who.containsKey(p.getUniqueId())) continue;
                 int side = plugin.sideOf(p, site, e.getValue());
@@ -172,12 +222,13 @@ final class ReadyCheck implements Listener {
     }
 
     private void answer(Player p, Asked a, boolean ready) {
-        if (!p.isOnline() || pending.remove(p.getUniqueId()) == null) return;
+        if (!p.isOnline() || !pending.containsKey(p.getUniqueId())) return;
+        if (ready || !waiting(a.warId())) pending.remove(p.getUniqueId());   // while waiting, someone not ready keeps being asked and can say ready later
         Map<UUID, Object[]> list = answers.get(a.warId());
         if (list == null) return;
         list.put(p.getUniqueId(), new Object[]{a.side(), a.name(), ready});
         p.showTitle(Title.title(Component.text(ready ? "Ready" : "Not ready", ready ? NamedTextColor.GREEN : NamedTextColor.RED),
-                Component.text("The staff has been told.", NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(200), Duration.ofSeconds(2), Duration.ofMillis(500))));
+                Component.text(waiting(a.warId()) ? (ready ? "Waiting for the others..." : "Type ready when you are.") : "The staff has been told.", NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(200), Duration.ofSeconds(2), Duration.ofMillis(500))));
         SiteData.War war = plugin.site() == null ? null : plugin.site().war(a.warId());
         String side = war != null && a.side() < war.sides().size() ? war.sides().get(a.side()).name() : "side " + a.side();
         plugin.getLogger().info("[" + a.warId() + "] " + a.name() + " (" + side + ") is " + (ready ? "ready" : "NOT ready"));
@@ -185,6 +236,7 @@ final class ReadyCheck implements Listener {
                 .append(Component.text(a.name() + " (" + side + ") is ", NamedTextColor.WHITE))
                 .append(Component.text(ready ? "ready" : "not ready", ready ? NamedTextColor.GREEN : NamedTextColor.RED))
                 .append(Component.text(war == null ? "" : ". " + summary(war), NamedTextColor.GRAY)));
+        if (war != null) checkAll(war);
     }
 
     /** "Attackers 3/5 ready, Defenders 1/2 ready; not ready: X; no answer: Y, Z". */

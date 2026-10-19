@@ -42,7 +42,7 @@ public final class CaptureEngine {
     }
 
     /** Why a locality cannot be captured right now (null = it can). */
-    public enum Blocked { NOT_IN_WAR, NOT_IN_PLAY, NO_ENGAGEMENT, NOT_A_TARGET }
+    public enum Blocked { NOT_IN_WAR, NOT_IN_PLAY, NO_ENGAGEMENT, WAITING, NOT_A_TARGET }
 
     private static final class Progress {
         int side; double seconds; double absent; boolean contested;
@@ -79,6 +79,11 @@ public final class CaptureEngine {
 
     /** Starts an Engagement (a Raid's targets are remembered as they are now, to be put back at its end). Replaces one going on. */
     public Engagement startEngagement(SiteData site, SiteData.War war, Engagement.Kind kind, Set<String> targets, double minutes, String by) {
+        return startEngagement(site, war, kind, targets, minutes, by, false);
+    }
+
+    /** waiting = opened but held until begin() (everyone ready): nothing is captured and its clock does not run meanwhile. */
+    public Engagement startEngagement(SiteData site, SiteData.War war, Engagement.Kind kind, Set<String> targets, double minutes, String by, boolean waiting) {
         double now = clock(war);
         Map<String, Integer> restore = new HashMap<>();
         Map<SiteData.City, Integer> cities = new LinkedHashMap<>();
@@ -89,7 +94,8 @@ public final class CaptureEngine {
             restore.put(k, mark);
             cities.put(c, mark);
         }
-        Engagement e = new Engagement(kind, Set.copyOf(targets), now, minutes > 0 ? now + minutes * 60 : Double.POSITIVE_INFINITY, Map.copyOf(restore), by);
+        Engagement e = new Engagement(kind, Set.copyOf(targets), now, Double.POSITIVE_INFINITY, Map.copyOf(restore), by, true, minutes);
+        if (!waiting) e = e.begun(now);
         engagements.put(war.id(), e);
         warsSeen.put(war.id(), war);
         if (cities.isEmpty()) raidRestore.remove(war.id()); else raidRestore.put(war.id(), cities);
@@ -107,10 +113,20 @@ public final class CaptureEngine {
         return e;
     }
 
+    /** The Engagement waiting for everyone to be ready begins now: captures are allowed and its clock starts. Null when none is waiting. */
+    public Engagement begin(SiteData.War war) {
+        Engagement e = engagements.get(war.id());
+        if (e == null || !e.waiting()) return null;
+        Engagement b = e.begun(clock(war));
+        engagements.put(war.id(), b);
+        return b;
+    }
+
     /** Why this unit cannot be captured now, or null when it can. */
     public Blocked blocked(WarGraph g, WarGraph.Unit u, Engagement e) {
         if (u == null || u.neutral()) return Blocked.NOT_IN_WAR;
         if (rules.requireEngagement() && e == null) return Blocked.NO_ENGAGEMENT;
+        if (e != null && e.waiting()) return Blocked.WAITING;
         if (e != null && u.members.stream().noneMatch(m -> e.covers(m.key()))) return Blocked.NOT_A_TARGET;
         boolean raid = e != null && e.kind() == Engagement.Kind.RAID;   // a Raid's Fort need not be In Play (7.17.13)
         if (rules.inPlay() && g.hasNetwork() && !raid && !u.inPlay) return Blocked.NOT_IN_PLAY;

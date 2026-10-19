@@ -27,7 +27,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 - **Encirclement** (7.8.9-10, `rules.encirclement`): um bolsão sem ligação com nenhuma capital (ou Supply Capital) do seu lado não põe nada In Play, a não ser a localidade cuja captura o reconectaria. Rotas pelo mar ainda não entram.
 - **Warzone** (7.8.7): Forts ligados por linha amarela no mapa são capturados como um só, no tempo da localidade mais demorada.
 - **Engagement** (7.8.8, `rules.require-engagement`): só se captura durante um Engagement aberto com `/bmcwar engagement start`. Strategic e free valem para o Theater inteiro; Tactical e Assault só para as cidades nomeadas; um Raid toma um Fort (que não precisa estar In Play) e o devolve ao fim (7.17.13). Cada um acaba sozinho no tempo do livro (`engagement.minutes`).
-- **Ready check:** quando um Engagement começa, todo jogador com lado na guerra vê um título na tela perguntando se está pronto e responde digitando `ready` ou `not ready` no chat (a resposta não aparece no chat público; a staff é avisada e vê o resumo em `/bmcwar status`). `engagement.ready-check` liga/desliga e ajusta os lembretes.
+- **Ready check:** quando um Engagement começa, todo jogador com lado na guerra vê um título na tela perguntando se está pronto e responde digitando `ready` ou `not ready` no chat (a resposta não aparece no chat público; a staff é avisada e vê o resumo em `/bmcwar status`). Por padrão o Engagement **só começa quando todos disseram ready** (até lá ninguém captura e o tempo dele não corre); quem sai do servidor deixa de segurar, e a staff pode começar mesmo assim com `/bmcwar engagement go`. `engagement.ready-check` liga/desliga, ajusta os lembretes e `wait-for-all: false` faz o check ser só informativo.
 - **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale).
 
 ## Comandos
@@ -40,6 +40,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 | `/bmcwar debug` | liga/desliga: mostra acima da hotbar, a cada segundo, se você está contando para as capturas e por que não | `bmcwar.use` |
 | `/bmcwar engagement` | o Engagement em andamento e quanto falta | `bmcwar.use` |
 | `/bmcwar engagement start <strategic\|tactical\|assault\|raid\|free> [war=<id>] [cidades...]` | abre um Engagement (a cidade de uma Warzone traz a Warzone inteira); avisa quando um alvo vai contra o livro (capital num Assault, alvo fora de In Play...) | `bmcwar.admin` |
+| `/bmcwar engagement go [guerra]` | começa agora o Engagement que está esperando todos ficarem ready | `bmcwar.admin` |
 | `/bmcwar engagement stop [guerra]` | encerra o Engagement (num Raid, o Fort volta a quem o tinha) | `bmcwar.admin` |
 | `/bmcwar set <cidade> <red\|blue\|green\|contested\|uncontrolled\|clear>` | troca a cor da cidade à mão (some qualquer captura em andamento nela) | `bmcwar.admin` (op) |
 | `/bmcwar reset [guerra] confirm` | volta o front ao início da guerra: toda cidade dos países da guerra fica com a cor do lado do próprio país, e as capturas em andamento somem (sem `confirm` só mostra o que vai fazer) | `bmcwar.admin` |

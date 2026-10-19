@@ -106,6 +106,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
     private String engagementLine(SiteData.War war) {
         Engagement e = plugin.engine().engagement(war);
         if (e == null) return plugin.engine().rules().requireEngagement() ? "No engagement: nothing can be captured now (7.8.8)." : "No engagement (captures are allowed anyway: rules.require-engagement is off).";
+        if (e.waiting()) return e.kind().label + " called, waiting for everyone to be ready (/bmcwar engagement go to begin it anyway).";
         String left = Double.isInfinite(e.endsAt()) ? "until stopped" : BmcWarPlugin.clock(e.endsAt() - plugin.engine().clock(war)) + " left";
         String targets = e.targets().isEmpty() ? "the whole Theater" : names(e.targets());
         return e.kind().label + " going on (" + left + "), over " + targets + ".";
@@ -154,6 +155,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                     case NOT_IN_WAR -> "It cannot be captured in this war.";
                     case NOT_IN_PLAY -> "It cannot be captured now: it is not In Play (7.8.1).";
                     case NO_ENGAGEMENT -> "It cannot be captured now: no engagement is going on (7.8.8).";
+                    case WAITING -> "It cannot be captured yet: the engagement begins when everyone is ready.";
                     case NOT_A_TARGET -> "It cannot be captured now: it is not a target of the engagement going on.";
                 }), why == null ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
                 int mark = plugin.markers().read(war, city), owner = site.sideOfCity(war, city);
@@ -206,7 +208,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         for (int i = 2; i < args.length; i++) {
             if (args[i].toLowerCase(Locale.ROOT).startsWith("war=")) warId = args[i].substring(4); else rest.add(args[i]);
         }
-        if (action.equals("stop") && warId == null && !rest.isEmpty()) warId = rest.remove(0);
+        if ((action.equals("stop") || action.equals("go")) && warId == null && !rest.isEmpty()) warId = rest.remove(0);
         List<SiteData.War> wars = plugin.handledWars();
         if (wars.isEmpty()) { say(sender, "No war is being run.", NamedTextColor.RED); return; }
         SiteData.War war = null;
@@ -234,7 +236,11 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             plugin.getLogger().info("[" + war.id() + "] engagement stopped by " + sender.getName());
             return;
         }
-        if (!action.equals("start") || rest.isEmpty()) { say(sender, "Usage: /bmcwar engagement start <" + String.join("|", KINDS) + "> [war=<id>] [cities...] | stop [war] | status", NamedTextColor.GRAY); return; }
+        if (action.equals("go")) {
+            if (!plugin.ready().begin(war, sender.getName())) say(sender, "No engagement is waiting to begin in " + war.name() + ".", NamedTextColor.GRAY);
+            return;
+        }
+        if (!action.equals("start") || rest.isEmpty()) { say(sender, "Usage: /bmcwar engagement start <" + String.join("|", KINDS) + "> [war=<id>] [cities...] | go [war] | stop [war] | status", NamedTextColor.GRAY); return; }
         Engagement.Kind kind;
         try { kind = Engagement.Kind.valueOf(rest.remove(0).toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException ex) { say(sender, "The kind is one of: " + String.join(", ", KINDS), NamedTextColor.RED); return; }
@@ -265,10 +271,10 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case RAID -> { if (targets.isEmpty()) { say(sender, "Name the Fort that is raided.", NamedTextColor.RED); return; } }
         }
         double minutes = kind == Engagement.Kind.FREE ? 0 : plugin.engagementMinutes(kind);
-        Engagement e = plugin.engine().startEngagement(site, war, kind, targets, minutes, sender.getName());
+        Engagement e = plugin.engine().startEngagement(site, war, kind, targets, minutes, sender.getName(), plugin.ready().holds());
         for (String w : warnings) say(sender, "Note: " + w, NamedTextColor.YELLOW);
-        plugin.broadcast(war, Component.text(kind.label + " started" + (minutes > 0 ? " (" + (int) minutes + " min)" : "") + ", over "
-                + (e.targets().isEmpty() ? "the whole Theater" : names(e.targets())) + ".", NamedTextColor.GOLD));
+        plugin.broadcast(war, Component.text(kind.label + (e.waiting() ? " called" : " started") + (minutes > 0 ? " (" + (int) minutes + " min)" : "") + ", over "
+                + (e.targets().isEmpty() ? "the whole Theater" : names(e.targets())) + "." + (e.waiting() ? " It begins when everyone is ready." : ""), NamedTextColor.GOLD));
         plugin.ready().start(war, e);
         plugin.getLogger().info("[" + war.id() + "] " + kind + " started by " + sender.getName() + " over " + (e.targets().isEmpty() ? "the Theater" : e.targets()));
     }
@@ -316,7 +322,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             for (String s : STATES) if (s.startsWith(args[2].toLowerCase(Locale.ROOT))) out.add(s);
         } else if (args[0].equalsIgnoreCase("engagement") || args[0].equalsIgnoreCase("eng")) {
             String last = args[args.length - 1].toLowerCase(Locale.ROOT);
-            if (args.length == 2) { for (String s : List.of("status", "start", "stop")) if (s.startsWith(last)) out.add(s); }
+            if (args.length == 2) { for (String s : List.of("status", "start", "go", "stop")) if (s.startsWith(last)) out.add(s); }
             else if (args.length == 3 && args[1].equalsIgnoreCase("start")) { for (String s : KINDS) if (s.startsWith(last)) out.add(s); }
             else if (args.length >= 4 && args[1].equalsIgnoreCase("start") && plugin.site() != null) {
                 for (SiteData.City c : plugin.site().cities()) if (c.name().toLowerCase(Locale.ROOT).startsWith(last) && out.size() < 40) out.add(c.name());

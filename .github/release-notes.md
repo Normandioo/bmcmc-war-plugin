@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.7.0
+- **An engagement only begins when everyone is ready.** `/bmcwar engagement start` now calls it and waits: nothing can be captured and its time does not run until everyone asked has typed `ready`. Players who said `not ready` keep being asked and can say `ready` later; a player who leaves the server no longer holds it up. When the last one is ready, everyone sees "<kind> begins!" and its time starts. The staff can begin it anyway with `/bmcwar engagement go`. `engagement.ready-check.wait-for-all: false` goes back to the check only informing (new key; the default applies without it).
+
 ### New in 0.6.0
 - **Capitulation table (`/bmcwar table`)**: a sidebar each player turns on and off for themselves, showing every nation of the war with an engagement going on and how close it is to Capitulating (its score out of 100, 7.9), marked when its capital is taken or it has capitulated, plus the time left in the engagement. Tags and nametag colours keep showing while it is on; if another plugin changes your scoreboard, the table turns itself off.
 

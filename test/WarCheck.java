@@ -95,6 +95,19 @@ public class WarCheck {
         check(captured(ev, southern), "a Strategic Campaign covers the whole Theater");
         eng.stopEngagement(site, war);
 
+        // 4b. an engagement waiting for everyone to be ready: nothing until it begins, and its time runs from then
+        icons.clear();
+        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(southern.key()), 20, "test", true);
+        ev = run(eng, site, war, List.of(at(southern, 0)), 30 * 60);
+        check(ev.isEmpty() && eng.engagement(war).waiting() && !icons.containsKey(southern.key()), "a waiting Assault captures nothing and does not run out (30 min)");
+        check(eng.begin(war) != null && !eng.engagement(war).waiting(), "it begins when everyone is ready");
+        ev = run(eng, site, war, List.of(at(southern, 0)), 2);
+        check(captured(ev, southern), "then its target is taken");
+        ev = run(eng, site, war, List.of(), 20 * 60);
+        check(ev.stream().anyMatch(e -> e.type() == CaptureEngine.Type.ENGAGEMENT_END), "and it ends 20 min after it began, not after it was called");
+        check(eng.begin(war) == null, "nothing to begin once it is over");
+
         // 5. a Raid: its Fort need not be In Play, and goes back to who held it when the Raid ends (7.17.13)
         icons.clear();
         eng = new CaptureEngine(rules(true, true), MARKERS);

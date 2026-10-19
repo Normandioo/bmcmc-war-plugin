@@ -91,9 +91,12 @@ engagement:
   # "ready" or "not ready" in the chat (the answer is not shown in the public chat; the staff is told).
   ready-check:
     enabled: true
+    # The engagement only begins (captures allowed, its time running) once everyone asked has said "ready". Someone who leaves no
+    # longer holds it up; the staff can begin it anyway with /bmcwar engagement go. false = it begins at once and the check only informs.
+    wait-for-all: true
     # Those who have not answered are asked again this often...
     remind-every-seconds: 20
-    # ...for this long after the engagement started.
+    # ...for this long after the engagement began (while it waits for everyone, they keep being asked).
     answer-within-seconds: 120
 
 announce:
