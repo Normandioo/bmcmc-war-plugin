@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.6.0
+- **Capitulation table (`/bmcwar table`)**: a sidebar each player turns on and off for themselves, showing every nation of the war with an engagement going on and how close it is to Capitulating (its score out of 100, 7.9), marked when its capital is taken or it has capitulated, plus the time left in the engagement. Tags and nametag colours keep showing while it is on; if another plugin changes your scoreboard, the table turns itself off.
+
 ### New in 0.5.1
 - **The ready check is only for who is online:** a player who leaves the server is no longer asked and drops out of the count (the staff is told); a player with a side who comes online while the check is still open is asked a few seconds after joining.
 

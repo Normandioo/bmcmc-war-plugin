@@ -36,6 +36,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 |---|---|---|
 | `/bmcwar status` | Engagement, quantas localidades estão In Play, capturas em andamento e Capitulação | `bmcwar.use` (todos) |
 | `/bmcwar where` | seu país (pela tag), em que cidade você está, se ela está In Play, cercada ou numa Warzone, se pode ser tomada agora e por quê, quem a segura, por quem você luta e se você está fundo demais no subsolo | `bmcwar.use` |
+| `/bmcwar table` | liga/desliga, só para você, uma tabela na lateral da tela com a % de capitulação de cada país da guerra com Engagement ativo (as tags continuam aparecendo) | `bmcwar.use` |
 | `/bmcwar debug` | liga/desliga: mostra acima da hotbar, a cada segundo, se você está contando para as capturas e por que não | `bmcwar.use` |
 | `/bmcwar engagement` | o Engagement em andamento e quanto falta | `bmcwar.use` |
 | `/bmcwar engagement start <strategic\|tactical\|assault\|raid\|free> [war=<id>] [cidades...]` | abre um Engagement (a cidade de uma Warzone traz a Warzone inteira); avisa quando um alvo vai contra o livro (capital num Assault, alvo fora de In Play...) | `bmcwar.admin` |
