@@ -12,6 +12,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -41,6 +43,9 @@ final class ReadyCheck implements Listener {
     private final Map<String, Map<UUID, Asked>> asked = new HashMap<>();
     private final Map<String, BukkitTask> reminders = new HashMap<>();
     private final Map<String, Engagement.Kind> kinds = new HashMap<>();
+    private final Map<String, SiteData.War> wars = new HashMap<>();
+    /** war id -> when the ready check stops asking (System.currentTimeMillis()). */
+    private final Map<String, Long> closesAt = new HashMap<>();
 
     ReadyCheck(BmcWarPlugin plugin) { this.plugin = plugin; }
 
@@ -54,6 +59,7 @@ final class ReadyCheck implements Listener {
         if (site == null) return;
         Map<UUID, Asked> who = new LinkedHashMap<>();
         for (Player p : Bukkit.getOnlinePlayers()) {
+            if (!p.isOnline()) continue;   // only who is on the server right now is asked
             int side = plugin.sideOf(p, site, war);
             if (side < 0) continue;
             Asked a = new Asked(war.id(), side, p.getName());
@@ -64,16 +70,19 @@ final class ReadyCheck implements Listener {
         asked.put(war.id(), who);
         answers.put(war.id(), new LinkedHashMap<>());
         kinds.put(war.id(), e.kind());
+        wars.put(war.id(), war);
         long every = Math.max(5, plugin.getConfig().getLong("engagement.ready-check.remind-every-seconds", 20));
         long within = Math.max(0, plugin.getConfig().getLong("engagement.ready-check.answer-within-seconds", 120));
         long started = System.currentTimeMillis();
+        closesAt.put(war.id(), started + within * 1000);
         reminders.put(war.id(), Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             boolean over = System.currentTimeMillis() - started >= within * 1000;
             for (Map.Entry<UUID, Asked> p : who.entrySet()) {
                 if (!pending.containsKey(p.getKey())) continue;
                 if (over) { pending.remove(p.getKey()); continue; }
                 Player player = Bukkit.getPlayer(p.getKey());
-                if (player != null) show(player, war, e.kind(), true);
+                if (player != null && player.isOnline()) show(player, war, e.kind(), true);
+                else pending.remove(p.getKey());   // left without answering: no longer asked
             }
             if (over) {
                 BukkitTask t = reminders.remove(war.id());
@@ -92,11 +101,50 @@ final class ReadyCheck implements Listener {
         asked.remove(war.id());
         answers.remove(war.id());
         kinds.remove(war.id());
+        wars.remove(war.id());
+        closesAt.remove(war.id());
     }
 
     void stopAll() {
         for (BukkitTask t : reminders.values()) t.cancel();
-        reminders.clear(); pending.clear(); asked.clear(); answers.clear(); kinds.clear();
+        reminders.clear(); pending.clear(); asked.clear(); answers.clear(); kinds.clear(); wars.clear(); closesAt.clear();
+    }
+
+    /** Someone who leaves is no longer asked, and drops out of the count (the check is about who is online). */
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        UUID id = event.getPlayer().getUniqueId();
+        pending.remove(id);
+        for (Map.Entry<String, Map<UUID, Asked>> e : asked.entrySet()) {
+            if (e.getValue().remove(id) == null) continue;
+            Map<UUID, Object[]> got = answers.get(e.getKey());
+            if (got != null) got.remove(id);
+            SiteData.War war = wars.get(e.getKey());
+            tellStaff(Component.text("[" + (war == null ? e.getKey() : war.name()) + "] " + event.getPlayer().getName() + " left the server and is out of the ready check.", NamedTextColor.GRAY));
+        }
+    }
+
+    /** Someone with a side who comes online while a ready check is still asking is asked too. */
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player p = event.getPlayer();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {   // a moment after joining, so the title is not lost in the loading screen
+            if (!p.isOnline()) return;
+            SiteData site = plugin.site();
+            if (site == null) return;
+            long now = System.currentTimeMillis();
+            for (Map.Entry<String, SiteData.War> e : wars.entrySet()) {
+                if (closesAt.getOrDefault(e.getKey(), 0L) <= now) continue;
+                Map<UUID, Asked> who = asked.get(e.getKey());
+                if (who == null || who.containsKey(p.getUniqueId())) continue;
+                int side = plugin.sideOf(p, site, e.getValue());
+                if (side < 0) continue;
+                Asked a = new Asked(e.getKey(), side, p.getName());
+                who.put(p.getUniqueId(), a);
+                pending.put(p.getUniqueId(), a);
+                show(p, e.getValue(), kinds.get(e.getKey()), false);
+            }
+        }, 60L);
     }
 
     private void show(Player p, SiteData.War war, Engagement.Kind kind, boolean again) {
@@ -124,7 +172,7 @@ final class ReadyCheck implements Listener {
     }
 
     private void answer(Player p, Asked a, boolean ready) {
-        if (pending.remove(p.getUniqueId()) == null) return;
+        if (!p.isOnline() || pending.remove(p.getUniqueId()) == null) return;
         Map<UUID, Object[]> list = answers.get(a.warId());
         if (list == null) return;
         list.put(p.getUniqueId(), new Object[]{a.side(), a.name(), ready});

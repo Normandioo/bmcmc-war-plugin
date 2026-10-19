@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.5.1
+- **The ready check is only for who is online:** a player who leaves the server is no longer asked and drops out of the count (the staff is told); a player with a side who comes online while the check is still open is asked a few seconds after joining.
+
 ### New in 0.5.0
 - **Ready check:** when an engagement starts, everyone with a side in the war gets a title on screen asking whether they are ready; they answer by typing `ready` or `not ready` in the chat. The answer stays out of the public chat, is confirmed on their screen and reported to the staff (`bmcwar.admin`) and the console. Those who do not answer are asked again every 20 s for 2 minutes. The summary (who is ready per side, who is not, who did not answer) is in `/bmcwar status` and `/bmcwar engagement`. Settings: `engagement.ready-check` (new keys; the defaults apply without them).
 
