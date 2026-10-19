@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.5.0
+- **Ready check:** when an engagement starts, everyone with a side in the war gets a title on screen asking whether they are ready; they answer by typing `ready` or `not ready` in the chat. The answer stays out of the public chat, is confirmed on their screen and reported to the staff (`bmcwar.admin`) and the console. Those who do not answer are asked again every 20 s for 2 minutes. The summary (who is ready per side, who is not, who did not answer) is in `/bmcwar status` and `/bmcwar engagement`. Settings: `engagement.ready-check` (new keys; the defaults apply without them).
+
 ### New in 0.4.1
 - **Jumping, falling, wind charges and maces count as normal.** Flying (fly) or gliding (elytra) only takes a player out of a capture after `capture.air-grace-seconds` (3) in a row, so an elytra opened by mistake when jumping off a tower no longer stops the count.
 - **`/bmcwar debug`**: shows above your hotbar, every second, whether you count for captures and why not. `/bmcwar where` says it too.

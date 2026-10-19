@@ -53,6 +53,8 @@ public final class BmcWarPlugin extends JavaPlugin {
     @Override public void onEnable() {
         saveDefaultConfig();
         cache = getDataFolder().toPath().resolve("territories-cache.json");
+        ready = new ReadyCheck(this);
+        Bukkit.getPluginManager().registerEvents(ready, this);
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
         if (cmd != null) { cmd.setExecutor(command); cmd.setTabCompleter(command); }
@@ -66,7 +68,11 @@ public final class BmcWarPlugin extends JavaPlugin {
         }
     }
 
+    private ReadyCheck ready;
+    ReadyCheck ready() { return ready; }
+
     @Override public void onDisable() {
+        if (ready != null) ready.stopAll();
         if (engine != null) engine.clear();   // cities this plugin left contested go back to who held them
     }
 
@@ -355,6 +361,7 @@ public final class BmcWarPlugin extends JavaPlugin {
     private void announce(CaptureEngine.Event e) {
         var c = getConfig();
         if (e.type() == CaptureEngine.Type.ENGAGEMENT_END) {
+            if (ready != null) ready.stop(e.war());
             getLogger().info("[" + e.war().id() + "] engagement over (time)");
             broadcast(e.war(), Component.text("The engagement is over: its time ran out. Captures stop until the next one.", NamedTextColor.GOLD));
             return;

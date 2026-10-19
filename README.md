@@ -27,6 +27,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 - **Encirclement** (7.8.9-10, `rules.encirclement`): um bolsão sem ligação com nenhuma capital (ou Supply Capital) do seu lado não põe nada In Play, a não ser a localidade cuja captura o reconectaria. Rotas pelo mar ainda não entram.
 - **Warzone** (7.8.7): Forts ligados por linha amarela no mapa são capturados como um só, no tempo da localidade mais demorada.
 - **Engagement** (7.8.8, `rules.require-engagement`): só se captura durante um Engagement aberto com `/bmcwar engagement start`. Strategic e free valem para o Theater inteiro; Tactical e Assault só para as cidades nomeadas; um Raid toma um Fort (que não precisa estar In Play) e o devolve ao fim (7.17.13). Cada um acaba sozinho no tempo do livro (`engagement.minutes`).
+- **Ready check:** quando um Engagement começa, todo jogador com lado na guerra vê um título na tela perguntando se está pronto e responde digitando `ready` ou `not ready` no chat (a resposta não aparece no chat público; a staff é avisada e vê o resumo em `/bmcwar status`). `engagement.ready-check` liga/desliga e ajusta os lembretes.
 - **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale).
 
 ## Comandos

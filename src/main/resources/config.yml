@@ -87,6 +87,14 @@ engagement:
     tactical: 40
     assault: 20
     raid: 30
+  # When an engagement starts, everyone with a side in the war is asked on screen whether they are ready, and answers by typing
+  # "ready" or "not ready" in the chat (the answer is not shown in the public chat; the staff is told).
+  ready-check:
+    enabled: true
+    # Those who have not answered are asked again this often...
+    remind-every-seconds: 20
+    # ...for this long after the engagement started.
+    answer-within-seconds: 120
 
 announce:
   start: true

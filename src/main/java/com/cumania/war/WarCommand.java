@@ -75,6 +75,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             say(sender, war.name(), NamedTextColor.RED);
             WarGraph g = plugin.engine().graph(site, war);
             say(sender, "  " + engagementLine(war), NamedTextColor.GOLD);
+            if (plugin.engine().engagement(war) != null && sender.hasPermission("bmcwar.admin")) say(sender, "  Ready check: " + plugin.ready().summary(war), NamedTextColor.GRAY);
             long inWar = g.units().stream().filter(u -> !u.neutral()).count(), inPlay = g.units().stream().filter(u -> u.inPlay).count();
             long encircled = g.units().stream().filter(u -> u.encircled).count();
             if (!g.hasNetwork()) say(sender, "  No Connections from the site: In Play cannot be worked out, every locality of the war counts.", NamedTextColor.GRAY);
@@ -207,7 +208,10 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         if (warId != null) { for (SiteData.War w : wars) if (w.id().equalsIgnoreCase(warId)) war = w; }
         else if (wars.size() == 1) war = wars.get(0);
         if (action.equals("status")) {
-            for (SiteData.War w : wars) if (war == null || w == war) say(sender, w.name() + ": " + engagementLine(w), NamedTextColor.GOLD);
+            for (SiteData.War w : wars) if (war == null || w == war) {
+                say(sender, w.name() + ": " + engagementLine(w), NamedTextColor.GOLD);
+                if (plugin.engine().engagement(w) != null && sender.hasPermission("bmcwar.admin")) say(sender, "  Ready check: " + plugin.ready().summary(w), NamedTextColor.GRAY);
+            }
             return;
         }
         if (!admin(sender)) return;
@@ -218,6 +222,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         }
         if (action.equals("stop")) {
             Engagement e = plugin.engine().stopEngagement(site, war);
+            plugin.ready().stop(war);
             if (e == null) { say(sender, "No engagement is going on in " + war.name() + ".", NamedTextColor.GRAY); return; }
             plugin.broadcast(war, Component.text("The " + e.kind().label.toLowerCase(Locale.ROOT) + " is over" + (e.kind() == Engagement.Kind.RAID
                     ? ": the raided fort goes back to who held it (7.17.13)." : ". Captures stop until the next engagement."), NamedTextColor.GOLD));
@@ -259,6 +264,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         for (String w : warnings) say(sender, "Note: " + w, NamedTextColor.YELLOW);
         plugin.broadcast(war, Component.text(kind.label + " started" + (minutes > 0 ? " (" + (int) minutes + " min)" : "") + ", over "
                 + (e.targets().isEmpty() ? "the whole Theater" : names(e.targets())) + ".", NamedTextColor.GOLD));
+        plugin.ready().start(war, e);
         plugin.getLogger().info("[" + war.id() + "] " + kind + " started by " + sender.getName() + " over " + (e.targets().isEmpty() ? "the Theater" : e.targets()));
     }
 
