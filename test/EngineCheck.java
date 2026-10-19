@@ -147,6 +147,18 @@ public class EngineCheck {
         check(zoned.cities().stream().filter(c -> c.limit() == SiteData.Limit.PROVINCE).count() == own - 1, "every other city keeps its province");
         check(site.cities().stream().noneMatch(c -> c.limit() == SiteData.Limit.ZONE), "without zones in the file nothing changes");
 
+        // 12. a war colour stuck on the type in the site's data ("SmallRed", "LargeCapitalRed") does not change the type
+        check("Small".equals(SiteData.plainKind("SmallRed")) && "LargeCapital".equals(SiteData.plainKind("LargeCapitalRed"))
+                && "Fort".equals(SiteData.plainKind("FortBlue")) && "Locality".equals(SiteData.plainKind("Locality")), "colour suffixes are taken off the type");
+        var coloured = com.google.gson.JsonParser.parseString(Files.readString(Path.of(args[0]))).getAsJsonObject();
+        for (var e : coloured.getAsJsonArray("localities")) {
+            var o = e.getAsJsonObject();
+            if (o.get("name").getAsString().equals(small.name()) && o.get("country").getAsString().equals(small.country())) o.addProperty("kind", small.kind() + "Red");
+        }
+        SiteData.City cc = SiteData.parse(coloured.toString(), 40).cities().stream().filter(c -> c.key().equals(small.key())).findFirst().orElse(null);
+        check(cc != null && cc.kind().equals(small.kind()) && now.secondsFor(cc) == now.secondsFor(small) && cc.capital() == small.capital(),
+                small.name() + " as " + small.kind() + "Red still takes " + (cc == null ? "?" : now.secondsFor(cc)) + " s");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

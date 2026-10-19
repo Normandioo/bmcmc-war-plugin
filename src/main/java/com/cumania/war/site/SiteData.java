@@ -44,6 +44,14 @@ public final class SiteData {
 
     public static String key(String name, String country) { return (name + "(" + country + ")").toLowerCase(Locale.ROOT); }
 
+    private static final java.util.regex.Pattern WAR_COLOUR = java.util.regex.Pattern.compile("(Red|Blue|Green|Contested|Uncontrolled)$");
+
+    /**
+     * The city's type without a war colour: the site's marker ids sometimes carry the dynmap colour ("SmallRed", "LargeCapitalRed",
+     * "FortBlue"), which would hide the type ("SmallRed" is not "Small") and the capital. The colour belongs on the dynmap icon only.
+     */
+    public static String plainKind(String kind) { return kind == null ? null : WAR_COLOUR.matcher(kind).replaceFirst(""); }
+
     public static SiteData parse(String json, int fallbackRadius) {
         TerritoryFile file = TerritoryFile.parse(json);
         List<TerritoryFile.Province> provinces = file.provinces == null ? List.of() : file.provinces;
@@ -59,11 +67,12 @@ public final class SiteData {
         List<City> cities = new ArrayList<>();
         if (file.localities != null) for (TerritoryFile.Locality l : file.localities) {
             String k = key(l.name, l.country);
+            String kind = plainKind(l.kind);
             Polygon zone = zones.get(k);
-            if (zone != null) { cities.add(new City(k, l.name, l.country, l.kind, l.x, l.z, zone, Limit.ZONE)); continue; }
+            if (zone != null) { cities.add(new City(k, l.name, l.country, kind, l.x, l.z, zone, Limit.ZONE)); continue; }
             Polygon own = null;
             for (Polygon p : outlines) if (p.contains(l.x, l.z)) { own = p; break; }   // otherwise the province the city stands in is its land
-            cities.add(new City(k, l.name, l.country, l.kind, l.x, l.z, own != null ? own : Polygon.circle(l.x, l.z, fallbackRadius), own != null ? Limit.PROVINCE : Limit.CIRCLE));
+            cities.add(new City(k, l.name, l.country, kind, l.x, l.z, own != null ? own : Polygon.circle(l.x, l.z, fallbackRadius), own != null ? Limit.PROVINCE : Limit.CIRCLE));
         }
 
         List<War> wars = new ArrayList<>();
