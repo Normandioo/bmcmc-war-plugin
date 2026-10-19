@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.2.1
+- **A war colour stuck on a city's type is ignored.** Some cities on the site carry the dynmap colour in their type (`SmallRed`, `FortBlue`, `LargeCapitalRed`); they were taken at once instead of in their time (Small 30 s, Fort 15 s) and capitals were not seen as capitals. Who holds a city still comes from its dynmap icon, as before.
+
 ### New in 0.2.0
 - **Capture limits drawn on the site.** A city with a limit drawn in the site's `gaia/capture.svg` (the `zones` in `territories.json`) is captured inside that limit instead of its province. Cities without one keep their province, as before.
 - `/bmcwar where` says when you are inside a drawn capture limit.
