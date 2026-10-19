@@ -4,7 +4,8 @@ Guerras pelo relógio. Hoje, para tomar uma cidade, os jogadores de um lado fica
 
 ## O que ele faz
 
-- **Cidades, lados e jogadores vêm do site** (`gaia/territories.json`): as cidades, as guerras com seus lados e quem joga por qual país. O nome do jogo (`ign` do `players.json`) leva ao nome do site, que leva à lista de população de um país, que leva a um lado da guerra.
+- **Cidades e lados vêm do site** (`gaia/territories.json`). **O país do jogador vem da tag dele** (o time do scoreboard), comparada com os nomes dos países no site. Um vassalo luta pelo lado do suserano: com a tag de Santana, que o site diz ser vassalo de Greneshire, o jogador é do lado de Greneshire. `players.side-from: site` volta a usar as listas de população do site, e `team-then-site` usa o site para quem não tem tag. Times com nome diferente do país vão em `players.team-aliases`.
+- **Subsolo:** quem está mais de `capture.underground.max-depth` (10) blocos abaixo do chão natural (pedra, terra, areia; construções não contam como chão) não conta, nem como atacante nem como resistência. Cidades com túneis ou bunkers que fazem parte delas ganham outra profundidade em `capture.underground.cities` (`Nome(País): 40`, ou `-1` para qualquer profundidade).
 - **Os limites de cada cidade vêm dos SVGs do site.** Se a cidade tem um limite de captura desenhado no `gaia/capture.svg` (id `zone__Nome-lp-País-rp-` ou rótulo `Nome(País)`), vale ele. Senão, vale a província do `latest.svg` em que o marcador dela está. O exportador converte os dois em polígonos em blocos (`zones` e `provinces` no `territories.json`). Nos dados de hoje, 355 das 356 cidades têm província própria, sem sobreposição. A que não tem nenhum dos dois recebe uma área redonda (`capture.fallback-radius`). `/bmcwar where` diz quando você está dentro de um limite desenhado.
 - **Tempo por tipo** (`capture.seconds`, em segundos): cidade (Small, Medium, Large e capitais) 30 s, Fort 15 s, o resto (Locality, Colonial) 0 s, ou seja, toma assim que um atacante está dentro sem oponente. Capitais multiplicam por `capital-multiplier` (1).
 - **Regra:** um lado que fica dentro da cidade pelo tempo dela, sem ninguém do lado que a segura lá dentro, toma a cidade. O ícone no dynmap muda para a cor do lado (Red = 1º lado, Blue = 2º, Green = 3º), como o site e o mod esperam.
@@ -21,8 +22,9 @@ Guerras pelo relógio. Hoje, para tomar uma cidade, os jogadores de um lado fica
 | Comando | O que faz | Permissão |
 |---|---|---|
 | `/bmcwar status` | capturas em andamento e tempo que falta | `bmcwar.use` (todos) |
-| `/bmcwar where` | em que cidade você está, quem a segura e por quem você luta | `bmcwar.use` |
+| `/bmcwar where` | seu país (pela tag), em que cidade você está, quem a segura, por quem você luta e se você está fundo demais no subsolo | `bmcwar.use` |
 | `/bmcwar set <cidade> <red\|blue\|green\|contested\|uncontrolled\|clear>` | troca a cor da cidade à mão (some qualquer captura em andamento nela) | `bmcwar.admin` (op) |
+| `/bmcwar reset [guerra] confirm` | volta o front ao início da guerra: toda cidade dos países da guerra fica com a cor do lado do próprio país, e as capturas em andamento somem (sem `confirm` só mostra o que vai fazer) | `bmcwar.admin` |
 | `/bmcwar reload` | recarrega a config e baixa os dados do site de novo | `bmcwar.admin` |
 
 ## Instalar

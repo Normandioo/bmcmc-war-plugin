@@ -14,7 +14,10 @@ import java.util.Map;
  * still counts. No Minecraft classes in here: the plugin feeds it the players' positions once a second.
  */
 public final class CaptureEngine {
-    public record Present(String player, int side, double x, double z) {}
+    /** depth = blocks below the natural ground (0 on the surface, in a building or under water). */
+    public record Present(String player, int side, double x, double z, int depth) {
+        public Present(String player, int side, double x, double z) { this(player, side, x, z, 0); }
+    }
 
     public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED }
 
@@ -41,6 +44,8 @@ public final class CaptureEngine {
 
     public CaptureEngine(Rules rules, Markers markers) { this.rules = rules; this.markers = markers; }
 
+    public Rules rules() { return rules; }
+
     /** One step of dt seconds: who stands where, in a war. Returns what happened. */
     public List<Event> tick(SiteData site, SiteData.War war, List<Present> present, double dt) {
         clock += dt;
@@ -53,6 +58,7 @@ public final class CaptureEngine {
             for (SiteData.City city : site.cities()) {
                 if (!city.area().contains(p.x(), p.z())) continue;
                 if (site.sideOfCity(war, city) < 0) break;   // a city of a country outside the war cannot be taken in it
+                if (rules.tooDeep(city, p.depth())) break;   // too far underground for this city: neither attacker nor resistance
                 counts.computeIfAbsent(city.key(), k -> new int[sides])[p.side()]++;
                 byKey.put(city.key(), city);
                 break;   // a place is in one city's land
@@ -172,6 +178,12 @@ public final class CaptureEngine {
         for (Map<String, Progress> mine : active.values())
             for (Progress pr : mine.values()) if (pr.contested && pr.shown) markers.write(pr.war, pr.city, pr.restore);
         active.clear();
+    }
+
+    /** The fronts are reset by hand: every capture under way in this war is dropped (its icons are about to be repainted), and nothing stays locked. */
+    public void reset(SiteData.War war) {
+        active.remove(war.id());
+        lockedUntil.keySet().removeIf(k -> k.startsWith(war.id() + "|"));
     }
 
     private static Progress progress(SiteData.War war, SiteData.City city, int side) {

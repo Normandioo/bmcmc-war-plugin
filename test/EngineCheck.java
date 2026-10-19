@@ -159,6 +159,52 @@ public class EngineCheck {
         check(cc != null && cc.kind().equals(small.kind()) && now.secondsFor(cc) == now.secondsFor(small) && cc.capital() == small.capital(),
                 small.name() + " as " + small.kind() + "Red still takes " + (cc == null ? "?" : now.secondsFor(cc)) + " s");
 
+        // 13. a tag names a country, by its key or its names, whatever the case, colours or brackets around it
+        String someCountry = file.countries.keySet().iterator().next();
+        check(someCountry.equals(site.countryOfTag(someCountry)) && someCountry.equals(site.countryOfTag("§c[" + someCountry.toUpperCase() + "] ")),
+                "the tag \"" + someCountry + "\" is that country, in any case and with colour codes");
+        check(site.countryOfTag("NoSuchCountryAtAll") == null, "a tag that names no country is nobody");
+
+        // 14. a vassal fights for its overlord's side even when the war lists only the overlord
+        var vassalJson = com.google.gson.JsonParser.parseString(Files.readString(Path.of(args[0]))).getAsJsonObject();
+        var cs = vassalJson.getAsJsonObject("countries");
+        String overlord = cs.keySet().stream().filter(k -> !k.equals(small.country())).findFirst().get();
+        var dip = cs.getAsJsonObject(small.country()).has("diplomacy") ? cs.getAsJsonObject(small.country()).getAsJsonObject("diplomacy") : new com.google.gson.JsonObject();
+        var ov = new com.google.gson.JsonArray(); ov.add(overlord); dip.add("overlord", ov); cs.getAsJsonObject(small.country()).add("diplomacy", dip);
+        for (var w : vassalJson.getAsJsonObject("war").getAsJsonArray("wars")) {   // the defenders list only the overlord now
+            var sides = w.getAsJsonObject().getAsJsonArray("sides");
+            var member = new com.google.gson.JsonObject(); member.addProperty("name", overlord);
+            var only = new com.google.gson.JsonArray(); only.add(overlord); member.add("countries", only);
+            var members = new com.google.gson.JsonArray(); members.add(member);
+            sides.get(1).getAsJsonObject().add("members", members);
+        }
+        SiteData vs = SiteData.parse(vassalJson.toString(), 40);
+        SiteData.War vw = vs.war("LombriganWar");
+        check(SiteData.sideOfCountry(vw, small.country()) == -1 && vs.sideOfNation(vw, small.country()) == 1,
+                small.country() + " (vassal of " + overlord + ") fights for the defenders through its overlord");
+        check(vs.sideOfNation(vw, vs.countryOfTag(small.country())) == 1, "and a player tagged " + small.country() + " is a defender");
+
+        // 15. too deep underground: neither attacker nor resistance, unless the city allows that depth
+        Rules deep = new Rules(Map.of("Small", 30.0), 0, 1, false, 0, 0, 1, 10, Map.of());
+        icons.clear(); eng = new CaptureEngine(deep, MARKERS);
+        var mole = List.of(new CaptureEngine.Present("a", 0, small.x(), small.z(), 25));
+        all = new ArrayList<>(); for (int t = 0; t < 60; t++) all.addAll(eng.tick(site, war, mole, 1));
+        check(all.isEmpty(), "an attacker 25 blocks underground (limit 10) captures nothing");
+        var shallow = List.of(new CaptureEngine.Present("a", 0, small.x(), small.z(), 5), new CaptureEngine.Present("d", 1, small.x(), small.z(), 25));
+        all = new ArrayList<>(); for (int t = 0; t < 31; t++) all.addAll(eng.tick(site, war, shallow, 1));
+        check(all.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPTURED), "a defender 25 blocks down is no resistance to an attacker in a basement (5)");
+        Rules bunker = new Rules(Map.of("Small", 30.0), 0, 1, false, 0, 0, 1, 10, Map.of(small.key(), 40));
+        icons.clear(); eng = new CaptureEngine(bunker, MARKERS);
+        all = new ArrayList<>(); for (int t = 0; t < 31; t++) all.addAll(eng.tick(site, war, mole, 1));
+        check(all.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPTURED), "where the city allows 40 blocks, 25 underground counts");
+
+        // 16. reset: captures under way are dropped
+        icons.clear(); eng = new CaptureEngine(now, MARKERS);
+        eng.tick(site, war, atk, 1);
+        check(eng.statusOf(war, small) != null, "a capture is under way");
+        eng.reset(war);
+        check(eng.statusOf(war, small) == null && eng.statuses(site, war).isEmpty(), "after reset nothing is under way");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

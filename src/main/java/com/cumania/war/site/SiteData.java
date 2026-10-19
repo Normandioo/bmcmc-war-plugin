@@ -32,10 +32,27 @@ public final class SiteData {
     private final List<War> wars;
     private final Map<String, String> siteNameByIgn;
     private final Map<String, String> countryBySite;
+    private final Map<String, String> countryByTag;   // simple(any name of a country) -> its key in the file
+    private final Map<String, String> overlordOf;     // country key -> its overlord's key (a vassal belongs to its overlord's side)
     private final String generated;
 
-    private SiteData(List<City> cities, List<War> wars, Map<String, String> siteNameByIgn, Map<String, String> countryBySite, String generated) {
-        this.cities = cities; this.wars = wars; this.siteNameByIgn = siteNameByIgn; this.countryBySite = countryBySite; this.generated = generated;
+    private SiteData(List<City> cities, List<War> wars, Map<String, String> siteNameByIgn, Map<String, String> countryBySite,
+                     Map<String, String> countryByTag, Map<String, String> overlordOf, String generated) {
+        this.cities = cities; this.wars = wars; this.siteNameByIgn = siteNameByIgn; this.countryBySite = countryBySite;
+        this.countryByTag = countryByTag; this.overlordOf = overlordOf; this.generated = generated;
+    }
+
+    /** A name the way tags and the site are compared: lower case, no accents, letters and digits only ("§c[Santana] " -> "santana"). */
+    public static String simple(String s) {
+        if (s == null) return "";
+        String n = java.text.Normalizer.normalize(s.replaceAll("§.", ""), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return n.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    /** The country (its key in the site's file) a tag names, by the country's key, official name or display name; null when none. */
+    public String countryOfTag(String tag) {
+        String s = simple(tag);
+        return s.isEmpty() ? null : countryByTag.get(s);
     }
 
     public List<City> cities() { return cities; }
@@ -99,7 +116,25 @@ public final class SiteData {
             if (e.getValue() == null || e.getValue().population == null) continue;
             for (String person : e.getValue().population) if (person != null) countryBySite.putIfAbsent(person.trim().toLowerCase(Locale.ROOT), e.getKey());
         }
-        return new SiteData(List.copyOf(cities), List.copyOf(wars), byIgn, countryBySite, file.generated == null ? "" : file.generated);
+        Map<String, String> byTag = new HashMap<>();
+        if (file.countries != null) for (Map.Entry<String, TerritoryFile.Country> e : file.countries.entrySet()) {   // the key first: it wins over a look-alike name
+            byTag.putIfAbsent(simple(e.getKey()), e.getKey());
+        }
+        if (file.countries != null) for (Map.Entry<String, TerritoryFile.Country> e : file.countries.entrySet()) {
+            TerritoryFile.Country c = e.getValue();
+            if (c == null) continue;
+            if (c.name != null) byTag.putIfAbsent(simple(c.name), e.getKey());
+            if (c.info != null) for (String k : List.of("displayName", "officialName")) if (c.info.get(k) != null) byTag.putIfAbsent(simple(c.info.get(k)), e.getKey());
+        }
+        byTag.remove("");
+        Map<String, String> overlords = new HashMap<>();
+        if (file.countries != null) for (Map.Entry<String, TerritoryFile.Country> e : file.countries.entrySet()) {
+            TerritoryFile.Country c = e.getValue();
+            if (c == null || c.diplomacy == null || c.diplomacy.overlord == null || c.diplomacy.overlord.isEmpty()) continue;
+            String over = byTag.get(simple(c.diplomacy.overlord.get(0)));   // the site writes the overlord's display name
+            if (over != null && !over.equals(e.getKey())) overlords.put(e.getKey(), over);
+        }
+        return new SiteData(List.copyOf(cities), List.copyOf(wars), byIgn, countryBySite, byTag, overlords, file.generated == null ? "" : file.generated);
     }
 
     private static boolean isPast(String iso) {
@@ -119,21 +154,39 @@ public final class SiteData {
         return null;
     }
 
-    /** The side of the war a country (or a member's name, like "Eleyetia") belongs to, or -1. */
+    /** The side of the war a country (or a member's name, like "Eleyetia") is listed on, or -1. Names are compared {@link #simple}. */
     public static int sideOfCountry(War war, String country) {
-        if (country == null) return -1;
-        String c = country.toLowerCase(Locale.ROOT);
-        for (int i = 0; i < war.sides().size(); i++) if (war.sides().get(i).names().contains(c)) return i;
+        String c = simple(country);
+        if (c.isEmpty()) return -1;
+        for (int i = 0; i < war.sides().size(); i++) for (String n : war.sides().get(i).names()) if (simple(n).equals(c)) return i;
         return -1;
     }
 
-    public int sideOfCity(War war, City city) { return sideOfCountry(war, city.country()); }
-
-    /** Which side this player fights on: their in-game name -> the site's name -> the country they belong to -> its side. -1 when they are not in the war. */
-    public int sideOfPlayer(War war, String ign) {
-        if (ign == null) return -1;
-        String site = siteNameByIgn.get(ign.trim().toLowerCase(Locale.ROOT));
-        String country = countryBySite.get((site != null ? site : ign).trim().toLowerCase(Locale.ROOT));
-        return sideOfCountry(war, country);
+    /**
+     * The side a country fights on: its own, or else its overlord's, and so on up (a vassal like Santana fights for Greneshire
+     * even when the war lists only Greneshire). -1 when neither it nor any overlord is in the war.
+     */
+    public int sideOfNation(War war, String country) {
+        String c = country;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        while (c != null && seen.add(c)) {
+            int side = sideOfCountry(war, c);
+            if (side >= 0) return side;
+            String key = countryByTag.getOrDefault(simple(c), c);
+            c = overlordOf.get(key);
+        }
+        return -1;
     }
+
+    public int sideOfCity(War war, City city) { return sideOfNation(war, city.country()); }
+
+    /** The country the site's population lists put this player in (in-game name -> the site's name -> the country), or null. */
+    public String countryOfPlayer(String ign) {
+        if (ign == null) return null;
+        String site = siteNameByIgn.get(ign.trim().toLowerCase(Locale.ROOT));
+        return countryBySite.get((site != null ? site : ign).trim().toLowerCase(Locale.ROOT));
+    }
+
+    /** Which side this player fights on by the site's population lists. -1 when they are not in the war. */
+    public int sideOfPlayer(War war, String ign) { return sideOfNation(war, countryOfPlayer(ign)); }
 }

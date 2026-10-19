@@ -45,6 +45,27 @@ capture:
   # A city's land is its capture limit (the site's capture.svg), else the province its marker is in.
   # A city with neither gets a round area of this radius (blocks).
   fallback-radius: 40
+  # Players underground do not count, neither as attackers nor as resistance. Depth is measured from the natural ground above
+  # the player (stone, dirt, sand... not buildings): inside a house or on a tower is depth 0, a basement a few blocks, a cave many.
+  underground:
+    # How many blocks below the ground still count in a city (-1 = any depth, the rule is off).
+    max-depth: 10
+    # Cities with tunnels or bunkers that are part of them, as Name(Country) like on the site: how deep still counts there.
+    # Example:
+    #   Tsarigrad(Versk): 40
+    #   Itapecuru(Lombriga): -1
+    cities: {}
+
+players:
+  # Where a player's country comes from:
+  #   team           = their scoreboard team (the tag), matched against the countries' names on the site (default)
+  #   site           = the site's population lists
+  #   team-then-site = the tag, or the site's lists when their tag names no country
+  # A vassal fights for its overlord: a Santana tag is a citizen of Greneshire's side, as the site says Santana is Greneshire's vassal.
+  side-from: team
+  # Teams whose name is not a country's name on the site: team name -> country. Example:
+  #   SAN: Santana
+  team-aliases: {}
 
 announce:
   start: true
