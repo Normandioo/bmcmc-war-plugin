@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 """Exports a world's territories from its latest.svg to <world>/territories.json,
 in Minecraft block coordinates, for the Xaero's addon mod. Besides the shapes it carries each
 country's panel data (type, leader, government, ethnicity, population, diplomacy) and the
@@ -139,6 +140,33 @@ def inside(rings, x, z):
     return hit
 
 
+def row_spans(rings, zc):
+    """Where the line z = zc is inside the rings (even-odd, as inside()): sorted [(x0, x1), ...]."""
+    xs = []
+    for r in rings:
+        n = len(r) // 2
+        for i in range(n):
+            j = (i - 1) % n
+            xi, zi, xj, zj = r[2 * i], r[2 * i + 1], r[2 * j], r[2 * j + 1]
+            if (zi > zc) != (zj > zc): xs.append((xj - xi) * (zc - zi) / (zj - zi) + xi)
+    xs.sort()
+    return list(zip(xs[0::2], xs[1::2]))
+
+
+def shared_blocks(rings_a, rings_b, z0, z1):
+    """How many blocks have their centre inside both limits, row by row between z0 and z1."""
+    count = 0
+    for z in range(math.floor(z0), math.ceil(z1)):
+        sa, sb = row_spans(rings_a, z + 0.5), row_spans(rings_b, z + 0.5)
+        i = j = 0
+        while i < len(sa) and j < len(sb):
+            lo, hi = max(sa[i][0], sb[j][0]), min(sa[i][1], sb[j][1])
+            if hi > lo: count += max(0, math.ceil(hi - 0.5) - math.ceil(lo - 0.5))   # centres x + 0.5 with lo <= c < hi, as inside() decides
+            if sa[i][1] < sb[j][1]: i += 1
+            else: j += 1
+    return count
+
+
 def capture_zones(svg_path, to_block, localities, expected_vb):
     """Each city's capture limit from the capture SVG, in blocks: [{name, country, rings}]. A shape is tied to a
     city by its id "zone__Name-lp-Country-rp-" (like the markers) or its Inkscape label "Name(Country)".
@@ -183,7 +211,9 @@ def capture_zones(svg_path, to_block, localities, expected_vb):
         loc = by_key[(plain(z['name']), z['country'])]
         if not inside(z['rings'], loc['x'] + 0.5, loc['z'] + 0.5):
             warn(f'{z["name"]}({z["country"]}): its marker is outside its own capture limit')
-    # two limits that share ground: someone standing there counts for both cities
+    # Two limits that share ground: someone standing there counts for both cities. Counted in whole
+    # blocks, by the plugin's own test (a block's centre inside both), so neighbours that only share a
+    # border are not reported.
     def box(z):
         xs = [v for r in z['rings'] for v in r[0::2]]; zs = [v for r in z['rings'] for v in r[1::2]]
         return min(xs), min(zs), max(xs), max(zs)
@@ -191,13 +221,138 @@ def capture_zones(svg_path, to_block, localities, expected_vb):
     for i in range(len(out)):
         for j in range(i + 1, len(out)):
             a, b = boxes[i], boxes[j]
-            if a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1]: continue
-            pa = [(r[k], r[k + 1]) for r in out[i]['rings'] for k in range(0, len(r), 2)]
-            pb = [(r[k], r[k + 1]) for r in out[j]['rings'] for k in range(0, len(r), 2)]
-            if any(inside(out[j]['rings'], x, z) for x, z in pa) or any(inside(out[i]['rings'], x, z) for x, z in pb):
-                warn(f'{out[i]["name"]}({out[i]["country"]}) and {out[j]["name"]}({out[j]["country"]}): their capture limits overlap')
+            if a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]: continue
+            shared = shared_blocks(out[i]['rings'], out[j]['rings'], max(a[1], b[1]), min(a[3], b[3]))
+            if shared:
+                warn(f'{out[i]["name"]}({out[i]["country"]}) and {out[j]["name"]}({out[j]["country"]}): '
+                     f'their capture limits overlap ({shared} block{"s" if shared != 1 else ""})')
     for w in warnings: print(f'  capture limits: {w}')
     return out
+
+
+# ---------------------------------------------------------------------------------------------
+# Connections (5.5.8-10), Warzones (5.5.14-15), Bridges and Straits, as js/network.js reads them
+# from the political map, for the BmcWar server plugin (In Play, 7.8.1)
+# ---------------------------------------------------------------------------------------------
+NETWORK_SNAP_SHARE = 0.015   # as js/network.js: a line end counts as touching a marker within 1.5% of the map's width
+
+
+def style_value(el, name, inherited):
+    """A style property (style="..." first, then the attribute), or the one inherited from the groups above."""
+    m = re.search(r'(?:^|;)\s*' + name + r'\s*:\s*([^;]+)', el.get('style') or '')
+    if m: return m.group(1).strip()
+    if el.get(name) is not None: return el.get(name).strip()
+    return inherited.get(name)
+
+
+def path_endpoints(d):
+    """First and last point of a path's data, any commands (as js/network.js pathEndpoints)."""
+    tokens = re.findall(r'[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?', d or '')
+    counts = {'M': 2, 'L': 2, 'T': 2, 'H': 1, 'V': 1, 'C': 6, 'S': 4, 'Q': 4, 'A': 7}
+    i, cmd, x, y, sx, sy, first = 0, None, 0.0, 0.0, 0.0, 0.0, None
+    while i < len(tokens):
+        if re.fullmatch(r'[a-zA-Z]', tokens[i]): cmd = tokens[i]; i += 1
+        elif cmd is None: break
+        rel, C = cmd == cmd.lower(), cmd.upper()
+        if C == 'Z': x, y, cmd = sx, sy, None; continue
+        n = counts.get(C)
+        if not n or i + n > len(tokens): break
+        try: args = [float(t) for t in tokens[i:i + n]]
+        except ValueError: break
+        i += n
+        if C == 'H': x = x + args[0] if rel else args[0]
+        elif C == 'V': y = y + args[0] if rel else args[0]
+        else: x, y = (x + args[-2], y + args[-1]) if rel else (args[-2], args[-1])
+        if C == 'M':
+            sx, sy = x, y
+            cmd = 'l' if rel else 'L'
+        if first is None: first = (x, y)
+    return (first, (x, y)) if first else None
+
+
+def stroke_lines(el, tx, ty, inherited):
+    """Every stroked, unfilled path, line or polyline: (element, start, end) in map units."""
+    for child in el:
+        try: dx, dy = translation(child.get('transform'))
+        except ValueError: continue   # a line under a rotation or scale: left out, like a loose line
+        tag = child.tag[len(SVG):] if child.tag.startswith(SVG) else child.tag
+        style = dict(inherited)
+        for k in ('fill', 'stroke', 'fill-opacity'):
+            v = style_value(child, k, inherited)
+            if v is not None: style[k] = v
+        if tag == 'g':
+            yield from stroke_lines(child, tx + dx, ty + dy, style)
+            continue
+        if tag not in ('path', 'line', 'polyline'): continue
+        fill = (style.get('fill') or 'black').lower()
+        try: fill_opacity = float(style.get('fill-opacity')) if style.get('fill-opacity') is not None else 1.0
+        except ValueError: fill_opacity = 1.0
+        filled = tag != 'line' and not (fill in ('none', 'transparent') or fill_opacity == 0)
+        stroke = style.get('stroke')
+        if filled or not stroke or stroke == 'none': continue
+        if tag == 'line':
+            g = lambda k: float(child.get(k) or 0)
+            ends = ((g('x1'), g('y1')), (g('x2'), g('y2')))
+        elif tag == 'polyline':
+            pts = [float(v) for v in re.split(r'[\s,]+', (child.get('points') or '').strip()) if v]
+            ends = ((pts[0], pts[1]), (pts[-2], pts[-1])) if len(pts) >= 4 else None
+        else:
+            ends = path_endpoints(child.get('d'))
+        if not ends: continue
+        (ax, ay), (bx, by) = ends
+        yield child, (ax + tx + dx, ay + ty + dy), (bx + tx + dx, by + ty + dy), stroke
+
+
+def is_yellow(color):
+    """A Warzone line's colour, as js/network.js isYellowColor."""
+    c = (color or '').strip().lower()
+    named = {'yellow': (255, 255, 0), 'gold': (255, 215, 0)}
+    if c in named: r, g, b = named[c]
+    elif re.fullmatch(r'#[0-9a-f]{3}', c): r, g, b = (int(ch * 2, 16) for ch in c[1:])
+    elif re.match(r'#[0-9a-f]{6}', c): r, g, b = (int(c[i:i + 2], 16) for i in (1, 3, 5))
+    else:
+        m = re.match(r'rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)', c)
+        if not m: return False
+        r, g, b = (int(v) for v in m.groups())
+    return r > 170 and g > 140 and b < 130 and r - b > 90
+
+
+def connection_network(tree, nodes, width):
+    """nodes: [{id, kind ('locality' | 'bridge' | 'strait'), open, x, y}] in map units. Each stroked line whose two ends point
+    at two markers Connects them (a yellow one also puts two localities in one Warzone); lines with one end out at sea
+    (a Harbor's link to its tile) or loose ends are left out, as on the site. Returns {"links": {...}, "edges": [...]}."""
+    snap = width * NETWORK_SNAP_SHARE
+
+    def pointed(p, d):
+        best, best_score = None, math.inf
+        for n in nodes:
+            vx, vy = n['x'] - p[0], n['y'] - p[1]
+            if math.hypot(vx, vy) > snap: continue
+            along = vx * d[0] + vy * d[1]
+            off = abs(vx * d[1] - vy * d[0])
+            score = off + max(0, -along) * 2 + max(0, along) * 0.25
+            if score < best_score: best, best_score = n, score
+        return best
+
+    edges, seen, loose = [], {}, 0
+    for el, a, b, stroke in stroke_lines(tree, 0.0, 0.0, {}):
+        length = math.hypot(b[0] - a[0], b[1] - a[1]) or 1
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        na, nb = pointed(a, (-ux, -uy)), pointed(b, (ux, uy))
+        if not na or not nb or na is nb: continue   # a Harbor's line out to sea, or a loose one
+        if na['kind'] != 'locality' and nb['kind'] != 'locality': loose += 1; continue
+        key = tuple(sorted((na['id'], nb['id'])))
+        warzone = is_yellow(stroke)
+        if key in seen:
+            if warzone: seen[key][2] = 1
+            continue
+        edge = [key[0], key[1], 1 if warzone else 0]
+        seen[key] = edge
+        edges.append(edge)
+    if loose: print(f'  connections: {loose} line(s) between two bridges/straits left out')
+    links = {n['id']: {'kind': n['kind'], 'open': n['open']} for n in nodes if n['kind'] != 'locality'
+             and any(n['id'] in e[:2] for e in edges)}
+    return {'links': links, 'edges': [e if e[2] else e[:2] for e in edges]}
 
 
 def as_list(value):
@@ -485,6 +640,15 @@ def war_block(meta, diplomacy, countries, localities, clock):
         theater = [t for t in as_list(war.get('theater')) if t.strip()]
         if theater: out['theater'] = ', '.join(theater)
         if war.get('notes'): out['notes'] = str(war['notes'])
+        # For the BmcWar plugin's In Play (as js/warmap.js uses them): Staff's picks of Connections across neutral land
+        # (7.7.3-4), Supply Capitals (7.8.11) and Bridges or Straits opened or closed in this war (7.7.10-14)
+        pairs = [[str(p[0]), str(p[1])] for p in (war.get('shortCircuits') or []) if isinstance(p, list) and len(p) == 2]
+        if pairs: out['shortCircuits'] = pairs
+        if war.get('shortCircuit') is False: out['shortCircuit'] = False
+        supply = {str(k): as_list(v) for k, v in (war.get('supplyCapitals') or {}).items() if as_list(v)}
+        if supply: out['supplyCapitals'] = supply
+        bridges = {str(k): str(v) for k, v in (war.get('bridges') or {}).items() if v is not None}
+        if bridges: out['bridges'] = bridges
         wars.append(out)
 
     alliances = []
@@ -600,10 +764,18 @@ def main():
         m = re.fullmatch(r'(.+)\((.+)\)', key)
         if m: by_key[(plain(m.group(1)), m.group(2))] = (m.group(1), m.group(2), value)
     localities = []
+    net_nodes = []   # localities, Bridges and Straits in map units, for the connections
     for el, tx, ty in walk(tree, 0.0, 0.0, ('ellipse',)):
         m = re.fullmatch(r'marker__(.+?)-lp-(.+?)-rp-__(.+)', el.get('id') or '')
-        if not m or (plain(m.group(1)), m.group(2)) not in by_key: continue   # bridges, straits...
+        if m and re.fullmatch(r'(Bridge|Strait)(Open|Closed)?', m.group(3)):
+            net_nodes.append({'id': f'{m.group(1)}({m.group(2)})', 'kind': m.group(3).startswith('Bridge') and 'bridge' or 'strait',
+                              'open': not m.group(3).endswith('Closed'),
+                              'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty})
+            continue
+        if not m or (plain(m.group(1)), m.group(2)) not in by_key: continue   # sea tiles, anything not in localities.json
         name, country, value = by_key[(plain(m.group(1)), m.group(2))]
+        net_nodes.append({'id': f'{name}({country})', 'kind': 'locality', 'open': True,
+                          'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty})
         x, z = to_block(float(el.get('cx')) + tx, float(el.get('cy')) + ty)
         entry = {'name': name, 'country': country, 'kind': m.group(3), 'x': x, 'z': z}
         for field in ('development', 'lord', 'ethnicity'):
@@ -618,6 +790,9 @@ def main():
         capture_path = root / cfg['captureFile']
         if capture_path.exists(): zones = capture_zones(capture_path, to_block, localities, vb)
         else: print(f'  capture limits: {capture_path} not found; none exported')
+
+    # Connections between localities, Warzones, Bridges and Straits (js/network.js), for the BmcWar plugin's In Play
+    network = connection_network(tree, net_nodes, vb[2])
 
     # Players behind the countries' populations: the site's own records and their skins
     people = list(dict.fromkeys(n for c in countries.values() for n in c.get('population', [])))
@@ -635,6 +810,7 @@ def main():
         'countries': countries, 'provinces': provinces, 'localities': localities,
     }
     if zones: out['zones'] = zones
+    if network['edges']: out['network'] = network
     if players: out['players'] = players
     if war['wars'] or war['alliances'] or war['truces'] or war['ultimatums'] or war['naps'] or war['locks']: out['war'] = war
     target = Path(args.out) if args.out else root / Path(cfg['latestFile']).parent / 'territories.json'

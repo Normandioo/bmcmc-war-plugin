@@ -17,12 +17,27 @@ Guerras pelo relógio. Hoje, para tomar uma cidade, os jogadores de um lado fica
 - **Avisos:** no chat quando um lado começa a capturar, quando a cidade fica contestada e quando é tomada; na barra acima da hotbar, o tempo que falta para quem está dentro. Cada aviso liga e desliga em `announce`.
 - **Não contam** jogadores em espectador, mortos, em vanish (`vanished` metadata) ou com a permissão `bmcwar.bypass`.
 
+## As Leis da Guerra (Law 7 do LOTG)
+
+O plugin segue as regras de captura do livro *The Laws of the Game* e lê o front do mesmo jeito que o modo War do site (`js/warmap.js`):
+
+- **Tempo por categoria** (`capture.seconds`): Settlement (Small, Medium, Large, Colonial) 30 s, Fort que não é Settlement (desenhado como Fort, com a designação "Fort" no site, ou capital que não é Settlement) 15 s, o resto na hora (7.8.5-6, 5.6.7).
+- **Theater** (7.1.2-7.1.4): numa guerra restrita (`theater` no `diplomacy.json`), só as localidades do Theater; senão, todas as dos países da guerra.
+- **In Play** (7.8.1, `rules.in-play`): só pode ser tomada uma localidade Conectada a outra de um lado diferente. As Conexões vêm das linhas do `latest.svg` (o exportador do site as grava em `network` no `territories.json`), passando por Bridges e Straits abertas e por terra neutra (Short Circuits, com as escolhas da Staff em `shortCircuits`).
+- **Encirclement** (7.8.9-10, `rules.encirclement`): um bolsão sem ligação com nenhuma capital (ou Supply Capital) do seu lado não põe nada In Play, a não ser a localidade cuja captura o reconectaria. Rotas pelo mar ainda não entram.
+- **Warzone** (7.8.7): Forts ligados por linha amarela no mapa são capturados como um só, no tempo da localidade mais demorada.
+- **Engagement** (7.8.8, `rules.require-engagement`): só se captura durante um Engagement aberto com `/bmcwar engagement start`. Strategic e free valem para o Theater inteiro; Tactical e Assault só para as cidades nomeadas; um Raid toma um Fort (que não precisa estar In Play) e o devolve ao fim (7.17.13). Cada um acaba sozinho no tempo do livro (`engagement.minutes`).
+- **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale).
+
 ## Comandos
 
 | Comando | O que faz | Permissão |
 |---|---|---|
-| `/bmcwar status` | capturas em andamento e tempo que falta | `bmcwar.use` (todos) |
-| `/bmcwar where` | seu país (pela tag), em que cidade você está, quem a segura, por quem você luta e se você está fundo demais no subsolo | `bmcwar.use` |
+| `/bmcwar status` | Engagement, quantas localidades estão In Play, capturas em andamento e Capitulação | `bmcwar.use` (todos) |
+| `/bmcwar where` | seu país (pela tag), em que cidade você está, se ela está In Play, cercada ou numa Warzone, se pode ser tomada agora e por quê, quem a segura, por quem você luta e se você está fundo demais no subsolo | `bmcwar.use` |
+| `/bmcwar engagement` | o Engagement em andamento e quanto falta | `bmcwar.use` |
+| `/bmcwar engagement start <strategic\|tactical\|assault\|raid\|free> [war=<id>] [cidades...]` | abre um Engagement (a cidade de uma Warzone traz a Warzone inteira); avisa quando um alvo vai contra o livro (capital num Assault, alvo fora de In Play...) | `bmcwar.admin` |
+| `/bmcwar engagement stop [guerra]` | encerra o Engagement (num Raid, o Fort volta a quem o tinha) | `bmcwar.admin` |
 | `/bmcwar set <cidade> <red\|blue\|green\|contested\|uncontrolled\|clear>` | troca a cor da cidade à mão (some qualquer captura em andamento nela) | `bmcwar.admin` (op) |
 | `/bmcwar reset [guerra] confirm` | volta o front ao início da guerra: toda cidade dos países da guerra fica com a cor do lado do próprio país, e as capturas em andamento somem (sem `confirm` só mostra o que vai fazer) | `bmcwar.admin` |
 | `/bmcwar reload` | recarrega a config e baixa os dados do site de novo | `bmcwar.admin` |
@@ -43,6 +58,12 @@ As versões do Paper API e do dynmap API em `build.gradle` são as que eu espera
 ```
 javac -d out -cp gson.jar $(find src/main/java/com/cumania/war/site src/main/java/com/cumania/war/engine -name '*.java') test/EngineCheck.java
 java -cp out:gson.jar EngineCheck caminho/para/territories.json
+```
+
+`test/WarCheck.java` testa a Law 7 (tempos, In Play, Encirclement, Warzone, Engagements, Theater, Capitulação) com os dados reais do site com a rede (`docs/territories-network-sample.json`); os números do front foram conferidos com o modo War do próprio site rodando num navegador:
+
+```
+java -cp out:gson.jar WarCheck docs/territories-network-sample.json
 ```
 
 `test/DynmapCheck.java` testa o adaptador do dynmap com marcadores falsos e precisa do `dynmap-api` no classpath, além de `src/main/java/com/cumania/war/dynmap`.

@@ -76,11 +76,18 @@ public final class BmcWarPlugin extends JavaPlugin {
         var c = getConfig();
         Map<String, Double> seconds = new HashMap<>();
         ConfigurationSection section = c.getConfigurationSection("capture.seconds");
-        if (section != null) for (String k : section.getKeys(false)) seconds.put(k, section.getDouble(k));
-        Rules rules = new Rules(seconds, c.getDouble("capture.default-seconds", 0), c.getDouble("capture.capital-multiplier", 1),
+        List<String> old = new ArrayList<>();
+        if (section != null) for (String k : section.getKeys(false)) {
+            String cat = switch (k.toLowerCase(java.util.Locale.ROOT)) { case "settlement" -> "Settlement"; case "fort" -> "Fort"; case "locality" -> "Locality"; default -> null; };
+            if (cat != null) seconds.put(cat, section.getDouble(k)); else old.add(k);
+        }
+        if (!old.isEmpty()) getLogger().warning("capture.seconds now goes by Settlement / Fort / Locality (Laws 7.8.5-6); the old keys " + old
+                + " are ignored and the Laws' times are used (Settlement 30 s, Fort 15 s, Locality at once). Delete plugins/BmcWar/config.yml to get the new one.");
+        Rules rules = new Rules(seconds, 0, c.getDouble("capture.capital-multiplier", 1),
                 !"pause".equalsIgnoreCase(c.getString("capture.on-resistance", "pause")), Math.max(0, c.getDouble("capture.grace-seconds", 0)),
                 Math.max(0, c.getDouble("capture.cooldown-seconds", 0)), Math.max(1, c.getInt("capture.min-attackers", 1)),
-                c.getInt("capture.underground.max-depth", 10), depthByCity(c.getConfigurationSection("capture.underground.cities")));
+                c.getInt("capture.underground.max-depth", 10), depthByCity(c.getConfigurationSection("capture.underground.cities")),
+                c.getBoolean("rules.in-play", true), c.getBoolean("rules.encirclement", true), c.getBoolean("rules.require-engagement", true));
         var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
         if (plugin instanceof org.dynmap.DynmapAPI api) {
             dynmap = new DynmapMarkers(api, c.getString("dynmap.world", "world"), m -> getLogger().warning(m));
@@ -114,6 +121,8 @@ public final class BmcWarPlugin extends JavaPlugin {
             SiteData parsed = SiteData.parse(response.body(), fallbackRadius());
             Files.createDirectories(cache.getParent());
             Files.writeString(cache, response.body());
+            if (parsed.network() == null && getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
+                getLogger().warning("The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
             site = parsed;
             Bukkit.getScheduler().runTask(this, this::rebuildMarkers);
         } catch (Exception e) {
@@ -270,8 +279,9 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (!city.area().contains(at.x(), at.z())) continue;
             var st = engine.statusOf(war, city);
             if (st == null) return;
-            if (st.contested()) player.sendActionBar(Component.text(city.name() + ": contested", NamedTextColor.YELLOW));
-            else player.sendActionBar(Component.text("Capturing " + city.name() + ": " + clock(st.remaining()) + " left", sideColor(war, st.side())));
+            String name = st.size() > 1 ? st.city().name() + " warzone" : city.name();
+            if (st.contested()) player.sendActionBar(Component.text(name + ": contested", NamedTextColor.YELLOW));
+            else player.sendActionBar(Component.text("Capturing " + name + ": " + clock(st.remaining()) + " left", sideColor(war, st.side())));
             return;
         }
     }
@@ -284,14 +294,29 @@ public final class BmcWarPlugin extends JavaPlugin {
         return TextColor.color(rgb != null ? rgb : DEFAULT_SIDE_COLORS[side % DEFAULT_SIDE_COLORS.length]);
     }
 
-    private Component side(SiteData.War war, int index) {
+    Component side(SiteData.War war, int index) {
         return index < 0 || index >= war.sides().size() ? Component.text("nobody", NamedTextColor.GRAY) : Component.text(war.sides().get(index).name(), sideColor(war, index));
+    }
+
+    /** Minutes an Engagement of this kind lasts at most (engagement.minutes.<kind>, the Laws' times by default). */
+    double engagementMinutes(com.cumania.war.engine.Engagement.Kind kind) {
+        return getConfig().getDouble("engagement.minutes." + kind.name().toLowerCase(java.util.Locale.ROOT), kind.lawMinutes);
+    }
+
+    /** Says something about a war to everyone. */
+    void broadcast(SiteData.War war, Component text) {
+        Bukkit.getServer().broadcast(Component.text("[" + war.name() + "] ", NamedTextColor.RED).append(text));
     }
 
     /** The chat line for what happened, if the config wants it said. */
     private void announce(CaptureEngine.Event e) {
         var c = getConfig();
-        String where = e.city().name() + " (" + e.city().country() + ")";
+        if (e.type() == CaptureEngine.Type.ENGAGEMENT_END) {
+            getLogger().info("[" + e.war().id() + "] engagement over (time)");
+            broadcast(e.war(), Component.text("The engagement is over: its time ran out. Captures stop until the next one.", NamedTextColor.GOLD));
+            return;
+        }
+        String where = e.label() + " (" + e.city().country() + ")";
         Component prefix = Component.text("[" + e.war().name() + "] ", NamedTextColor.RED);
         Component line = null;
         switch (e.type()) {
@@ -299,7 +324,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             case CONTESTED -> { if (c.getBoolean("announce.contested", true)) line = prefix.append(Component.text(where + " is contested", NamedTextColor.YELLOW)); }
             case ABORTED -> { if (c.getBoolean("announce.aborted", false)) line = prefix.append(Component.text("The capture of " + where + " was abandoned", NamedTextColor.GRAY)); }
             case CAPTURED -> { if (c.getBoolean("announce.captured", true)) line = prefix.append(Component.text(where + " was captured by ", NamedTextColor.WHITE)).append(side(e.war(), e.side())); }
-            case CLEARED -> { }
+            default -> { }
         }
         getLogger().info("[" + e.war().id() + "] " + e.type() + " " + where + " side=" + e.side() + " from=" + e.from());
         if (line != null) Bukkit.getServer().broadcast(line);

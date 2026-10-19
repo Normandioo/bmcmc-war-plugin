@@ -22,6 +22,8 @@ public final class TerritoryFile {
     public WarData war;
     /** Optional: cities' capture limits drawn in the site's capture SVG (captureFile), in place of the province around them. */
     public List<Zone> zones;
+    /** Optional: the Connection network (for In Play, 7.8.1). Without it every locality of the war counts as In Play. */
+    public Network network;
 
     /** A city's capture limit: name + country as in localities; rings like a province's (even-odd). */
     public static final class Zone {
@@ -46,6 +48,27 @@ public final class TerritoryFile {
         public boolean live;
         public List<Side> sides;
         public List<Captured> captured;
+        /** Staff's picks of Connections across neutral land (7.7.3-4): pairs of "Name(Country)". */
+        public List<List<String>> shortCircuits;
+        /** False turns the automatic Connections across neutral land off for this war. */
+        public Boolean shortCircuit;
+        /** Supply Capitals given by the Server (7.8.11): nation -> "Name(Country)"s. */
+        public Map<String, List<String>> supplyCapitals;
+        /** Bridges or Straits opened or closed in this war (7.7.10-14): "Name(Country)" -> "open" / "closed". */
+        public Map<String, String> bridges;
+    }
+
+    /** The Connections between localities, Warzones, Bridges and Straits, as the site reads them from its map (js/network.js). */
+    public static final class Network {
+        /** "Name(Country)" of a Bridge or Strait -> what it is and whether it is drawn open. */
+        public Map<String, Link> links;
+        /** [a, b] = a and b are Connected; [a, b, 1] = and in the same Warzone. a or b may be a Bridge or Strait. */
+        public List<List<Object>> edges;
+    }
+
+    public static final class Link {
+        public String kind;   // bridge / strait
+        public boolean open;
     }
 
     public static final class Side {

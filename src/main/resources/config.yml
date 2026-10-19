@@ -14,17 +14,16 @@ dynmap:
 wars: []
 
 capture:
-  # How long (SECONDS) a side must stay inside a city's land to take it, by the city's type.
-  # Rule: a city (Small / Medium / Large, capitals included) takes 30 s, a Fort 15 s, everything else is taken the moment
-  # an attacker is inside with no opponent there (0).
+  # How long (SECONDS) a side must stay inside a locality's land, with no opponent there, to take it (Laws 7.8.5-6):
+  #   Settlement = Small, Medium, Large or Colonial (5.8.4)
+  #   Fort       = a Fort that is not a Settlement: drawn as a Fort, designated "Fort" on the site, or a Capital that is not a
+  #                Settlement (5.5.6, 5.6.7)
+  #   Locality   = everything else: taken the moment an attacker is inside with no opponent there
+  # A Warzone (Forts joined by a yellow line on the site's map) is captured as one, in the time of its longest locality (7.8.7).
   seconds:
-    Locality: 0
-    Colonial: 0
+    Settlement: 30
     Fort: 15
-    Small: 30
-    Medium: 30
-    Large: 30
-  default-seconds: 0
+    Locality: 0
   # A capital takes this many times as long as its type says.
   capital-multiplier: 1
   # Someone of the side that holds the city inside it is resistance: the city shows as contested.
@@ -66,6 +65,25 @@ players:
   # Teams whose name is not a country's name on the site: team name -> country. Example:
   #   SAN: Santana
   team-aliases: {}
+
+# The Laws of the Game, Law 7. Each one can be turned off.
+rules:
+  # A locality may only be captured while In Play: Connected (on the site's map) to a locality held by another side of the war
+  # (7.8.1). Needs the "network" the site's exporter writes into territories.json; without it every locality counts as In Play.
+  in-play: true
+  # Pockets cut off from every Capital their side holds are Encircled and put nothing In Play, except a locality whose capture
+  # would break the encirclement (7.8.9-10). Sea routes are not worked out yet: a colony reached only by sea may show as encircled.
+  encirclement: true
+  # Captures only happen during an Engagement started with /bmcwar engagement start (7.8.8).
+  require-engagement: true
+
+engagement:
+  # How long each kind of Engagement lasts at most, in minutes (the Laws' times); it ends by itself then. "free" has no limit.
+  minutes:
+    strategic: 60
+    tactical: 40
+    assault: 20
+    raid: 30
 
 announce:
   start: true

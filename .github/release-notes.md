@@ -1,6 +1,15 @@
-Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). New config keys (`capture.underground`, `players`): the old `plugins/BmcWar/config.yml` keeps working with the defaults; delete it to get the new keys with their comments.
+Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** before starting this version: `capture.seconds` now goes by Settlement / Fort / Locality, and there are new `rules` and `engagement` sections (the old file still loads, with the Laws' defaults and a warning).
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
+
+### New in 0.4.0 - the Laws of the Game, Law 7
+- **Times by category (7.8.5-6):** a Settlement (Small, Medium, Large, Colonial) 30 s, a Fort that is not a Settlement 15 s (drawn as a Fort, designated "Fort" on the site, or a non-Settlement capital), anything else at once.
+- **In Play (7.8.1):** only a locality Connected to one held by another side may be captured. The Connections come from the site's map (its exporter now writes them into `territories.json`), through open Bridges and Straits and across neutral land (short circuits), exactly as the site's War mapmode works them out.
+- **Encirclement (7.8.9-10):** pockets cut off from every capital of their side put nothing In Play, except a locality whose capture breaks the encirclement. Sea routes are not worked out yet.
+- **Warzones (7.8.7):** Forts joined by a yellow line are captured as one.
+- **Theater (7.1.2-7.1.4):** a Restricted War is only fought over its Theater.
+- **Engagements (7.8.8):** captures only happen during an engagement: `/bmcwar engagement start <strategic|tactical|assault|raid|free> [cities...]`, `stop`, `status`. Each ends by itself after the Laws' time; a Raid's Fort goes back to its holder at the end (7.17.13). `rules.require-engagement: false` turns this off.
+- **Capitulation (7.9)** scores in `/bmcwar status`; `/bmcwar where` says whether a locality is In Play, encircled, in a warzone, and whether it can be captured now.
 
 ### New in 0.3.0
 - **A player's country comes from their tag** (scoreboard team), matched against the countries on the site. A vassal fights for its overlord: a Santana tag is on Greneshire's side. `players.side-from: site` goes back to the site's population lists; `players.team-aliases` maps team names that are not a country's name.
