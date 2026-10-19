@@ -168,7 +168,10 @@ final class CapitulationTable implements Listener {
             if (!dst.displayName().equals(src.displayName())) dst.displayName(src.displayName());
             if (!dst.prefix().equals(src.prefix())) dst.prefix(src.prefix());
             if (!dst.suffix().equals(src.suffix())) dst.suffix(src.suffix());
-            if (src.hasColor()) { if (!dst.hasColor() || dst.color() != src.color()) dst.color(src.color()); }
+            if (src.hasColor()) {
+                NamedTextColor c = NamedTextColor.nearestTo(src.color());
+                if (!dst.hasColor() || !c.equals(dst.color())) dst.color(c);
+            }
             else if (dst.hasColor()) dst.color(null);
             for (Team.Option o : Team.Option.values()) if (dst.getOption(o) != src.getOption(o)) dst.setOption(o, src.getOption(o));
             if (dst.allowFriendlyFire() != src.allowFriendlyFire()) dst.setAllowFriendlyFire(src.allowFriendlyFire());
