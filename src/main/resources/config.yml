@@ -1,17 +1,27 @@
 # BmcWar - wars by the clock. Everything about cities, wars, sides and players comes from the site.
 
 site:
-  # The file the site publishes (cities with their land from the SVG, wars, who is in which country).
-  url: https://bmcmc.online/gaia/territories.json
+  # How often every map's territories.json is downloaded again.
   refresh-minutes: 5
 
-# The Minecraft world the wars are fought in, and the dynmap world its markers are in.
-world: world
-dynmap:
-  world: world
-
-# Which wars to run (their ids in the site's diplomacy.json). Empty = every war marked "live": true that has not ended.
-wars: []
+# The maps wars are fought on, all at the same time. Each one is a Minecraft world with its own file on the site (its cities with
+# their land, its wars, its countries) and its own markers in dynmap:
+#   world        = the Minecraft world (its folder name, as /bmcwar where or /mv list shows it)
+#   site         = the territories.json the site publishes for that map
+#   dynmap-world = the dynmap world its city markers are in (usually the same name as the world)
+#   wars         = which wars to run there (their ids in that map's diplomacy.json); [] = every war marked "live": true that has not ended
+# Nobody counts on a map unless they stand in its world. To add an event map, copy the gaia entry and change the four values, e.g.:
+#   evento:
+#     world: evento
+#     site: https://bmcmc.online/evento/territories.json
+#     dynmap-world: evento
+#     wars: []
+maps:
+  gaia:
+    world: world
+    site: https://bmcmc.online/gaia/territories.json
+    dynmap-world: world
+    wars: []
 
 capture:
   # How long (SECONDS) a side must stay inside a locality's land, with no opponent there, to take it (Laws 7.8.5-6):

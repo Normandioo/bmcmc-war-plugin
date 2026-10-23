@@ -42,17 +42,12 @@ public final class BmcWarPlugin extends JavaPlugin {
     private static final int[] DEFAULT_SIDE_COLORS = {0xD83A3A, 0x3A6FD8, 0x3AAE5A};
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build();
-    private volatile SiteData site;
-    private CaptureEngine engine;
-    private Markers markers;
-    private DynmapMarkers dynmap;
-    private Path cache;
+    private final List<WarMap> maps = new ArrayList<>();
     private long lastTick;
     private int rebuildCountdown;
 
     @Override public void onEnable() {
         saveDefaultConfig();
-        cache = getDataFolder().toPath().resolve("territories-cache.json");
         ready = new ReadyCheck(this);
         Bukkit.getPluginManager().registerEvents(ready, this);
         table = new CapitulationTable(this);
@@ -65,9 +60,6 @@ public final class BmcWarPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskTimer(this, this::tick, 40L, 20L);
         long minutes = Math.max(1, getConfig().getLong("site.refresh-minutes", 5));
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::fetchSite, 20L, minutes * 60 * 20L);
-        if (Files.exists(cache)) {   // start from the last download while the new one arrives
-            try { site = SiteData.parse(Files.readString(cache), fallbackRadius()); rebuildMarkers(); } catch (Exception e) { getLogger().warning("Ignoring the cached site data: " + e); }
-        }
     }
 
     private ReadyCheck ready;
@@ -78,12 +70,12 @@ public final class BmcWarPlugin extends JavaPlugin {
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();
         if (table != null) table.stopAll();
-        if (engine != null) engine.clear();   // cities this plugin left contested go back to who held them
+        for (WarMap m : maps) if (m.engine != null) m.engine.clear();   // cities this plugin left contested go back to who held them
     }
 
     /** Builds the engine from the config. Called on start and on /bmcwar reload. */
     void setup() {
-        if (engine != null) engine.clear();   // put back the icons of the captures under way before starting over
+        for (WarMap m : maps) if (m.engine != null) m.engine.clear();   // put back the icons of the captures under way before starting over
         var c = getConfig();
         Map<String, Double> seconds = new HashMap<>();
         ConfigurationSection section = c.getConfigurationSection("capture.seconds");
@@ -99,17 +91,90 @@ public final class BmcWarPlugin extends JavaPlugin {
                 Math.max(0, c.getDouble("capture.cooldown-seconds", 0)), Math.max(1, c.getInt("capture.min-attackers", 1)),
                 c.getInt("capture.underground.max-depth", 10), depthByCity(c.getConfigurationSection("capture.underground.cities")),
                 c.getBoolean("rules.in-play", true), c.getBoolean("rules.encirclement", true), c.getBoolean("rules.require-engagement", true));
-        var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
-        if (plugin instanceof org.dynmap.DynmapAPI api) {
-            dynmap = new DynmapMarkers(api, c.getString("dynmap.world", "world"), m -> getLogger().warning(m));
-            markers = dynmap;
-        } else {
-            dynmap = null;
-            markers = new MemoryMarkers();
-            getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
+        // the maps: the old single-map keys (site.url, world, dynmap.world, wars) still work when there is no "maps" section
+        List<WarMap> old2 = new ArrayList<>(maps);
+        maps.clear();
+        Path folder = getDataFolder().toPath();
+        ConfigurationSection ms = c.getConfigurationSection("maps");
+        if (ms != null && !ms.getKeys(false).isEmpty()) {
+            for (String name : ms.getKeys(false)) {
+                ConfigurationSection m = ms.getConfigurationSection(name);
+                if (m == null) continue;
+                String world = m.getString("world", name);
+                String url = m.getString("site");
+                if (url == null || url.isBlank()) { getLogger().warning("maps." + name + " has no \"site\" (its territories.json): left out."); continue; }
+                maps.add(new WarMap(name, world, url, m.getString("dynmap-world", world), m.getStringList("wars"), folder.resolve("territories-cache-" + name + ".json")));
+            }
         }
-        engine = new CaptureEngine(rules, markers);
-        rebuildMarkers();
+        if (maps.isEmpty()) {
+            maps.add(new WarMap("main", c.getString("world", "world"), c.getString("site.url", "https://bmcmc.online/gaia/territories.json"),
+                    c.getString("dynmap.world", "world"), c.getStringList("wars"), folder.resolve("territories-cache.json")));
+        }
+        var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
+        if (!(plugin instanceof org.dynmap.DynmapAPI)) getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
+        for (WarMap m : maps) {
+            if (plugin instanceof org.dynmap.DynmapAPI api) {
+                m.dynmap = new DynmapMarkers(api, m.dynmapWorld, w -> getLogger().warning("[" + m.name + "] " + w));
+                m.markers = m.dynmap;
+            } else {
+                m.dynmap = null;
+                m.markers = new MemoryMarkers();
+            }
+            m.engine = new CaptureEngine(rules, m.markers);
+            for (WarMap o : old2) if (o.url.equals(m.url)) m.site = o.site;   // keep what was downloaded while the new data arrives
+            if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
+                try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
+            }
+            m.rebuildMarkers();
+            if (Bukkit.getWorld(m.world) == null) getLogger().warning("[" + m.name + "] There is no world called \"" + m.world + "\" on the server (yet): nobody can capture there until it exists.");
+        }
+        getLogger().info("War maps: " + String.join(", ", maps.stream().map(m -> m.name + " (world " + m.world + ")").toList()));
+    }
+
+    List<WarMap> maps() { return maps; }
+
+    /** The map whose world the player is in, or null. */
+    WarMap mapAt(Player p) {
+        String w = p.getWorld().getName();
+        for (WarMap m : maps) if (m.world.equals(w)) return m;
+        return null;
+    }
+
+    /** The map a war belongs to (null when none has it any more). */
+    WarMap mapOf(SiteData.War war) {
+        for (WarMap m : maps) { SiteData s = m.site; if (s != null) for (SiteData.War w : s.wars()) if (w == war) return m; }
+        for (WarMap m : maps) if (m.has(war)) return m;
+        return null;
+    }
+
+    /** The map the sender stands on, else the first one with data. */
+    WarMap mapFor(org.bukkit.command.CommandSender sender) {
+        if (sender instanceof Player p) { WarMap m = mapAt(p); if (m != null && m.site != null) return m; }
+        for (WarMap m : maps) if (m.site != null) return m;
+        return maps.isEmpty() ? null : maps.get(0);
+    }
+
+    SiteData site(SiteData.War war) { WarMap m = mapOf(war); return m == null ? null : m.site; }
+    CaptureEngine engine(SiteData.War war) { WarMap m = mapOf(war); return m == null ? maps.get(0).engine : m.engine; }
+    Markers markers(SiteData.War war) { WarMap m = mapOf(war); return m == null ? maps.get(0).markers : m.markers; }
+    /** The rules (the same on every map). */
+    Rules rules() { return maps.get(0).engine.rules(); }
+
+    /** A war's id, with its map's name when another map has a war of the same id ("map:id"). */
+    String warId(SiteData.War war) {
+        WarMap mine = mapOf(war);
+        for (WarMap m : maps) if (m != mine && m.site != null && m.site.war(war.id()) != null) return (mine == null ? "?" : mine.name) + ":" + war.id();
+        return war.id();
+    }
+
+    /** The running wars a text names: their id, or "map:id". */
+    List<SiteData.War> warsNamed(String text) {
+        List<SiteData.War> out = new ArrayList<>();
+        for (SiteData.War w : handledWars()) {
+            WarMap m = mapOf(w);
+            if (w.id().equalsIgnoreCase(text) || m != null && (m.name + ":" + w.id()).equalsIgnoreCase(text)) out.add(w);
+        }
+        return out;
     }
 
     /** capture.underground.cities: "Name(Country)": depth -> keyed like a city ("name(country)" in lower case). */
@@ -121,11 +186,13 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     private int fallbackRadius() { return getConfig().getInt("capture.fallback-radius", 40); }
 
-    private void rebuildMarkers() { if (dynmap != null && site != null) dynmap.rebuild(site); }
+    /** Downloads every map's site data (off the game thread) and swaps each in when it reads. */
+    void fetchSite() { for (WarMap m : new ArrayList<>(maps)) fetch(m); }
 
-    /** Downloads the site's data (off the game thread) and swaps it in when it reads. */
-    void fetchSite() {
-        String url = getConfig().getString("site.url", "https://bmcmc.online/gaia/territories.json");
+    private void fetch(WarMap m) {
+        String url = m.url;
+        SiteData site = m.site;
+        Path cache = m.cache;
         try {
             HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").GET().build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode());
@@ -133,27 +200,28 @@ public final class BmcWarPlugin extends JavaPlugin {
             Files.createDirectories(cache.getParent());
             Files.writeString(cache, response.body());
             if (parsed.network() == null && getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
-                getLogger().warning("The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
-            site = parsed;
-            Bukkit.getScheduler().runTask(this, this::rebuildMarkers);
+                getLogger().warning("[" + m.name + "] The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
+            m.site = parsed;
+            Bukkit.getScheduler().runTask(this, m::rebuildMarkers);
         } catch (Exception e) {
-            getLogger().warning("Could not update the site's data from " + url + ": " + e);
+            getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);
         }
     }
 
-    SiteData site() { return site; }
-    CaptureEngine engine() { return engine; }
-    Markers markers() { return markers; }
-
-    /** The wars this plugin runs: the ones listed in the config, or every war the site marks live that has not ended. */
+    /** The wars this plugin runs, on every map: the ones listed for the map, or every war its site marks live that has not ended. */
     List<SiteData.War> handledWars() {
-        SiteData s = site;
+        List<SiteData.War> out = new ArrayList<>();
+        for (WarMap m : maps) out.addAll(handledWars(m));
+        return out;
+    }
+
+    List<SiteData.War> handledWars(WarMap m) {
+        SiteData s = m.site;
         List<SiteData.War> out = new ArrayList<>();
         if (s == null) return out;
-        List<String> ids = getConfig().getStringList("wars");
         for (SiteData.War w : s.wars()) {
             if (w.ended() || w.sides().size() < 2) continue;
-            if (ids.isEmpty() ? w.live() : ids.stream().anyMatch(id -> id.equalsIgnoreCase(w.id()))) out.add(w);
+            if (m.wars.isEmpty() ? w.live() : m.wars.stream().anyMatch(id -> id.equalsIgnoreCase(w.id()))) out.add(w);
         }
         return out;
     }
@@ -191,10 +259,12 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     /** For /bmcwar where and /bmcwar debug: whether the player counts now, and why not (including too deep and no side). */
     String countsLine(Player p) {
-        SiteData s = site;
-        String why = excluded(p, getConfig().getString("world", "world"));
-        if (why == null && s != null && engine != null) {
-            List<SiteData.War> wars = handledWars();
+        WarMap map = mapAt(p);
+        SiteData s = map == null ? null : map.site;
+        String why = map == null ? "not in a war map's world (" + String.join(", ", maps.stream().map(m -> m.world).toList()) + ")" : excluded(p, map.world);
+        if (why == null && s != null && map.engine != null) {
+            CaptureEngine engine = map.engine;
+            List<SiteData.War> wars = handledWars(map);
             if (!wars.isEmpty() && wars.stream().allMatch(w -> sideOf(p, s, w) < 0)) why = "no side in the war (tag: " + (countryFromTag(p, s) == null ? "none" : countryFromTag(p, s)) + ")";
             if (why == null) {
                 int depth = depthUnderground(p);
@@ -299,14 +369,30 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     /** Once a second: who stands where, and what the clock does about it. */
     private void tick() {
-        SiteData s = site;
-        if (s == null || engine == null) return;
         long now = System.nanoTime();
         double dt = Math.max(0.5, Math.min(5, (now - lastTick) / 1e9));
         lastTick = now;
-        if (--rebuildCountdown <= 0) { rebuildCountdown = 60; rebuildMarkers(); }   // markers are edited by hand: look them up again every minute
-        String world = getConfig().getString("world", "world");
-        for (SiteData.War war : handledWars()) {
+        boolean rebuild = --rebuildCountdown <= 0;
+        if (rebuild) rebuildCountdown = 60;
+        for (WarMap map : maps) {
+            SiteData s = map.site;
+            if (s == null || map.engine == null) continue;
+            if (rebuild) map.rebuildMarkers();   // markers are edited by hand: look them up again every minute
+            tick(map, s, dt);
+        }
+        if (table != null) table.tick();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (!debug.contains(p.getUniqueId())) continue;
+            String line = countsLine(p);
+            p.sendActionBar(Component.text("[BmcWar] " + line + (p.isFlying() ? " (flying)" : p.isGliding() ? " (gliding)" : p.isOnGround() ? "" : " (in the air)"),
+                    line.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+        }
+    }
+
+    private void tick(WarMap map, SiteData s, double dt) {
+        String world = map.world;
+        CaptureEngine engine = map.engine;
+        for (SiteData.War war : handledWars(map)) {
             List<CaptureEngine.Present> present = new ArrayList<>();
             Map<CaptureEngine.Present, Player> who = new HashMap<>();
             for (Player p : Bukkit.getOnlinePlayers()) {
@@ -318,18 +404,11 @@ public final class BmcWarPlugin extends JavaPlugin {
                 present.add(at); who.put(at, p);
             }
             for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) announce(e);
-            if (getConfig().getBoolean("announce.actionbar", true)) for (var e : who.entrySet()) actionBar(s, war, e.getKey(), e.getValue());
-        }
-        if (table != null) table.tick();
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (!debug.contains(p.getUniqueId())) continue;
-            String line = countsLine(p);
-            p.sendActionBar(Component.text("[BmcWar] " + line + (p.isFlying() ? " (flying)" : p.isGliding() ? " (gliding)" : p.isOnGround() ? "" : " (in the air)"),
-                    line.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+            if (getConfig().getBoolean("announce.actionbar", true)) for (var e : who.entrySet()) actionBar(engine, s, war, e.getKey(), e.getValue());
         }
     }
 
-    private void actionBar(SiteData s, SiteData.War war, CaptureEngine.Present at, Player player) {
+    private void actionBar(CaptureEngine engine, SiteData s, SiteData.War war, CaptureEngine.Present at, Player player) {
         for (SiteData.City city : s.cities()) {
             if (!city.area().contains(at.x(), at.z())) continue;
             var st = engine.statusOf(war, city);

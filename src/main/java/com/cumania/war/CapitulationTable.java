@@ -99,8 +99,9 @@ final class CapitulationTable implements Listener {
         if (s == null) return;
         Scoreboard board = s.own();
         Objective old = board.getObjective(DisplaySlot.SIDEBAR);
-        SiteData site = plugin.site();
-        SiteData.War war = site == null ? null : pickWar(p, site);
+        SiteData.War war = pickWar(p);
+        SiteData site = war == null ? null : plugin.site(war);
+        if (site == null) war = null;
 
         List<String[]> rows = new ArrayList<>();   // entry text, score, colour index (-1 grey, side otherwise), suffix
         Component title;
@@ -109,7 +110,7 @@ final class CapitulationTable implements Listener {
             rows.add(new String[]{"No engagement", "0", "-1", ""});
         } else {
             title = Component.text(war.name(), NamedTextColor.GOLD, TextDecoration.BOLD);
-            WarGraph g = plugin.engine().graph(site, war);
+            WarGraph g = plugin.engine(war).graph(site, war);
             List<Capitulation.Score> scores = new ArrayList<>(Capitulation.of(site, war, g));
             scores.sort(Comparator.comparingDouble(Capitulation.Score::score).reversed().thenComparing(Capitulation.Score::nation));
             for (Capitulation.Score c : scores.subList(0, Math.min(13, scores.size()))) {
@@ -117,8 +118,8 @@ final class CapitulationTable implements Listener {
                 String suffix = c.capitulated() ? " CAPITULATED" : c.capitalTaken() ? " capital taken" : "";
                 rows.add(new String[]{c.nation(), String.valueOf(pct), String.valueOf(c.side()), suffix});
             }
-            Engagement e = plugin.engine().engagement(war);
-            if (e != null) rows.add(new String[]{e.kind().label + (e.waiting() ? " (waiting)" : Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.endsAt() - plugin.engine().clock(war))), "-1", "-2", ""});
+            Engagement e = plugin.engine(war).engagement(war);
+            if (e != null) rows.add(new String[]{e.kind().label + (e.waiting() ? " (waiting)" : Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.endsAt() - plugin.engine(war).clock(war))), "-1", "-2", ""});
         }
 
         // Rebuilt each second on a fresh objective, then swapped in, so the sidebar does not flicker or keep stale rows
@@ -142,15 +143,20 @@ final class CapitulationTable implements Listener {
         if (old != null && old.getName().startsWith(OBJECTIVE)) old.unregister();
     }
 
-    /** The war shown: one with an engagement going on, the player's own first. */
-    private SiteData.War pickWar(Player p, SiteData site) {
-        SiteData.War first = null;
+    /** The war shown: one with an engagement going on; on the map the player is in first, then one they fight in. */
+    private SiteData.War pickWar(Player p) {
+        WarMap here = plugin.mapAt(p);
+        SiteData.War first = null, mine = null;
         for (SiteData.War w : plugin.handledWars()) {
-            if (plugin.engine().engagement(w) == null) continue;
-            if (plugin.sideOf(p, site, w) >= 0) return w;
+            if (plugin.engine(w).engagement(w) == null) continue;
+            SiteData site = plugin.site(w);
+            boolean side = site != null && plugin.sideOf(p, site, w) >= 0;
+            if (here != null && plugin.mapOf(w) == here && side) return w;
+            if (side && mine == null) mine = w;
             if (first == null) first = w;
         }
-        return first;
+        if (here != null) for (SiteData.War w : plugin.handledWars(here)) if (plugin.engine(w).engagement(w) != null) return w;
+        return mine != null ? mine : first;
     }
 
     private static NamedTextColor plainColour(net.kyori.adventure.text.format.TextColor c) { return NamedTextColor.nearestTo(c); }

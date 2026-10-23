@@ -1,6 +1,9 @@
-Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** before starting this version: `capture.seconds` now goes by Settlement / Fort / Locality, and there are new `rules` and `engagement` sections (the old file still loads, with the Laws' defaults and a warning).
+Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** before starting this version: the world, site and dynmap settings moved into a new `maps` section (the old file still loads, as a single map).
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
+
+### New in 0.8.0
+- **Several maps at once.** The new `maps` section lists every world wars are fought in, each with its own `territories.json` from the site (cities, limits, wars, countries) and its own dynmap world; each map has its own front, engagements and captures, and they all run at the same time (Gaia and an event map, say). Only players standing in a map's world count there. A war's ready check does not ask players who are in another map's world. `/bmcwar where` and `/bmcwar status` say which map; when two maps have wars with the same id, commands take `map:id`.
 
 ### New in 0.7.0
 - **An engagement only begins when everyone is ready.** `/bmcwar engagement start` now calls it and waits: nothing can be captured and its time does not run until everyone asked has typed `ready`. Players who said `not ready` keep being asked and can say `ready` later; a player who leaves the server no longer holds it up. When the last one is ready, everyone sees "<kind> begins!" and its time starts. The staff can begin it anyway with `/bmcwar engagement go`. `engagement.ready-check.wait-for-all: false` goes back to the check only informing (new key; the default applies without it).

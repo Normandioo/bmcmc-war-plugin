@@ -15,6 +15,7 @@ Guerras pelo relógio. Hoje, para tomar uma cidade, os jogadores de um lado fica
 - **Quem segura a cidade é o que o ícone diz.** Se um moderador trocar o ícone à mão, vale o que ele pôs (e uma captura em andamento nessa cidade é descartada). Cidade sem cor de guerra é de quem é dona dela.
 - **Sem tolerância:** `grace-seconds` (0) é quanto os atacantes podem sair antes de a tentativa ser descartada (0 = descarta na hora); `cooldown-seconds` (0 = sem espera) é o tempo em que uma cidade recém-tomada não pode ser tomada de novo.
 - **Avisos:** no chat quando um lado começa a capturar, quando a cidade fica contestada e quando é tomada; na barra acima da hotbar, o tempo que falta para quem está dentro. Cada aviso liga e desliga em `announce`.
+- **Vários mapas ao mesmo tempo** (`maps` no `config.yml`): cada mapa é um mundo do Minecraft com o próprio `territories.json` do site (cidades, limites, guerras, países) e os próprios marcadores no dynmap, e tem o próprio front, Engagements e capturas. Gaia é um; um mapa de evento (guerra simulada noutro mundo) é outro, e os dois rodam juntos. Só conta quem está no mundo do mapa; o ready check de uma guerra não pergunta quem está no mundo de outro mapa. Se dois mapas têm guerra com o mesmo id, os comandos aceitam `mapa:id`.
 - **Não contam** jogadores em espectador, mortos, em vanish (`vanished` metadata) ou com a permissão `bmcwar.bypass`.
 
 ## As Leis da Guerra (Law 7 do LOTG)
@@ -49,7 +50,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 ## Instalar
 
 1. Compile (`./gradlew build` nesta pasta, Java 21) e ponha `build/libs/BmcWar-<versão>.jar` em `plugins/`. Precisa do **dynmap** (sem ele funciona, mas nada aparece no mapa e tudo é esquecido ao reiniciar).
-2. Inicie o servidor uma vez para criar `plugins/BmcWar/config.yml`; ajuste os tempos (os que vêm são **valores de exemplo**) e o nome do mundo.
+2. Inicie o servidor uma vez para criar `plugins/BmcWar/config.yml`; ajuste os tempos (os que vêm são **valores de exemplo**) e os mapas (`maps`: mundo, `territories.json` do site e mundo do dynmap de cada um).
 3. Marque a guerra com `"live": true` no `diplomacy.json` do site e rode o workflow, para ela sair no `territories.json` como ao vivo. Com `wars: []` o plugin roda todas as guerras assim; para rodar só algumas, liste os ids em `wars`.
 4. Os ícones do dynmap precisam existir com o nome do tipo da cidade mais a cor (`SmallRed`, `SmallBlue`, `LocalityContested`, `FortUncontrolled`...), que são os que os moderadores já usam. Se faltar algum, o plugin avisa uma vez no console e não troca o ícone.
 
@@ -74,7 +75,7 @@ java -cp out:gson.jar WarCheck docs/territories-network-sample.json
 
 ## Limites
 
-- Só o mundo configurado em `world` (o principal), só até três lados por guerra (as cores do dynmap são três).
+- Só os mundos listados em `maps`, só até três lados por guerra (as cores do dynmap são três).
 - Um jogador que está na população de mais de um país conta pelo primeiro que o site lista.
 - Ainda não foi rodado num servidor de verdade: a lógica foi testada com os dados reais, e o código de Paper e dynmap só foi checado contra a API que ele usa. Teste primeiro com uma guerra de teste e a permissão `bmcwar.bypass` na staff.
 
