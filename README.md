@@ -29,7 +29,7 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 - **Warzone** (7.8.7): Forts ligados por linha amarela no mapa são capturados como um só, no tempo da localidade mais demorada.
 - **Engagement** (7.8.8, `rules.require-engagement`): só se captura durante um Engagement aberto com `/bmcwar engagement start`. Strategic e free valem para o Theater inteiro; Tactical e Assault só para as cidades nomeadas; um Raid toma um Fort (que não precisa estar In Play) e o devolve ao fim (7.17.13). Cada um acaba sozinho no tempo do livro (`engagement.minutes`).
 - **Ready check:** quando um Engagement começa, todo jogador com lado na guerra vê um título na tela perguntando se está pronto e responde digitando `ready` ou `not ready` no chat (a resposta não aparece no chat público; a staff é avisada e vê o resumo em `/bmcwar status`). Por padrão o Engagement **só começa quando todos disseram ready** (até lá ninguém captura e o tempo dele não corre); quem sai do servidor deixa de segurar, e a staff pode começar mesmo assim com `/bmcwar engagement go`. `engagement.ready-check` liga/desliga, ajusta os lembretes e `wait-for-all: false` faz o check ser só informativo.
-- **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale).
+- **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale). Quando um país capitula (capital tomada e score acima de 100), todo mundo é avisado no chat e com um título na tela (quem luta na guerra ou está no mapa dela), e o Engagement em andamento acaba (`engagement.end-on-capitulation`, `announce.capitulated`).
 
 ## Comandos
 

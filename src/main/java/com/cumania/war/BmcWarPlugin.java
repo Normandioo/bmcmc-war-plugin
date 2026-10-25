@@ -9,6 +9,7 @@ import com.cumania.war.site.SiteData;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
@@ -120,7 +121,7 @@ public final class BmcWarPlugin extends JavaPlugin {
                 m.dynmap = null;
                 m.markers = new MemoryMarkers();
             }
-            m.engine = new CaptureEngine(rules, m.markers);
+            m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(c.getBoolean("engagement.end-on-capitulation", true));
             for (WarMap o : old2) if (o.url.equals(m.url)) m.site = o.site;   // keep what was downloaded while the new data arrives
             if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
                 try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
@@ -442,6 +443,29 @@ public final class BmcWarPlugin extends JavaPlugin {
         Bukkit.getServer().broadcast(Component.text("[" + war.name() + "] ", NamedTextColor.RED).append(text));
     }
 
+    /**
+     * A nation has Capitulated (7.9.7): said in the chat and on the screen of everyone fighting in the war or standing on its map, and,
+     * when it ended the engagement, that too.
+     */
+    private void capitulated(CaptureEngine.Event e) {
+        String nation = e.city().country();
+        boolean ended = e.from() == 1;
+        getLogger().info("[" + e.war().id() + "] " + nation + " CAPITULATED" + (ended ? "; engagement ended" : ""));
+        if (ended && ready != null) ready.stop(e.war());
+        if (!getConfig().getBoolean("announce.capitulated", true)) return;
+        broadcast(e.war(), Component.text(nation, sideColor(e.war(), e.side())).append(Component.text(" has capitulated: its capital "
+                + e.city().name() + " is taken and its score is over 100 (7.9.7)." + (ended ? " The engagement is over." : ""), NamedTextColor.GOLD)));
+        WarMap map = mapOf(e.war());
+        SiteData s = map == null ? null : map.site;
+        Title title = Title.title(Component.text(nation + " capitulated", NamedTextColor.RED),
+                Component.text(ended ? "The engagement is over" : e.war().name(), NamedTextColor.GOLD),
+                Title.Times.times(java.time.Duration.ofMillis(400), java.time.Duration.ofSeconds(5), java.time.Duration.ofMillis(800)));
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            boolean here = map != null && p.getWorld().getName().equals(map.world);
+            if (here || s != null && sideOf(p, s, e.war()) >= 0) p.showTitle(title);
+        }
+    }
+
     /** The chat line for what happened, if the config wants it said. */
     private void announce(CaptureEngine.Event e) {
         var c = getConfig();
@@ -451,6 +475,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             broadcast(e.war(), Component.text("The engagement is over: its time ran out. Captures stop until the next one.", NamedTextColor.GOLD));
             return;
         }
+        if (e.type() == CaptureEngine.Type.CAPITULATED) { capitulated(e); return; }
         String where = e.label() + " (" + e.city().country() + ")";
         Component prefix = Component.text("[" + e.war().name() + "] ", NamedTextColor.RED);
         Component line = null;

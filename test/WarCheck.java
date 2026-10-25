@@ -150,6 +150,33 @@ public class WarCheck {
         var lomb = caps.stream().filter(c -> c.nation().equals("Lombriga")).findFirst().orElse(null);
         check(lomb != null && lomb.capitalTaken() && Math.round(lomb.score()) == 150 && lomb.capitulated(), "Lombriga capitulates when Itapecuru falls (" + (lomb == null ? "-" : Math.round(lomb.score())) + ")");
 
+        // 9. a nation that Capitulates is announced once, and the engagement going on ends
+        icons.clear();
+        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng.startEngagement(site, war, Engagement.Kind.STRATEGIC, Set.of(), 60, "test");
+        ev = run(eng, site, war, List.of(), 1);
+        check(ev.isEmpty(), "nobody has capitulated: no news");
+        icons.put(itapecuru.key(), 0);
+        ev = run(eng, site, war, List.of(at(southern, 0)), 1);
+        var cap = ev.stream().filter(e -> e.type() == CaptureEngine.Type.CAPITULATED).toList();
+        check(cap.size() == 1 && cap.get(0).city().country().equals("Lombriga") && cap.get(0).from() == 1 && eng.engagement(war) == null,
+                "Lombriga capitulates: said once, and the Strategic Campaign ends");
+        check(!captured(ev, southern) && !icons.containsKey(southern.key()), "nothing is captured in the tick the engagement ends");
+        ev = run(eng, site, war, List.of(), 3);
+        check(ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.CAPITULATED), "not said again");
+        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng.startEngagement(site, war, Engagement.Kind.STRATEGIC, Set.of(), 60, "test");
+        ev = run(eng, site, war, List.of(), 2);
+        check(ev.isEmpty() && eng.engagement(war) != null, "a nation already capitulated when the plugin starts is not news and ends nothing");
+        icons.clear();
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnCapitulation(false);
+        eng.startEngagement(site, war, Engagement.Kind.STRATEGIC, Set.of(), 60, "test");
+        run(eng, site, war, List.of(), 1);
+        icons.put(itapecuru.key(), 0);
+        ev = run(eng, site, war, List.of(), 1);
+        check(ev.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPITULATED && e.from() == 0) && eng.engagement(war) != null,
+                "with end-on-capitulation off it is said, and the engagement goes on");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

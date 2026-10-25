@@ -91,6 +91,8 @@ rules:
   require-engagement: true
 
 engagement:
+  # When a nation of the war Capitulates (its capital taken and its score over 100, 7.9.7), the engagement going on ends.
+  end-on-capitulation: true
   # How long each kind of Engagement lasts at most, in minutes (the Laws' times); it ends by itself then. "free" has no limit.
   minutes:
     strategic: 60
@@ -114,5 +116,7 @@ announce:
   contested: true
   captured: true
   aborted: false
+  # A nation that Capitulates: in the chat, and a title on the screen of everyone in the war or on its map.
+  capitulated: true
   # Show the time left above the hotbar to the players inside the city.
   actionbar: true

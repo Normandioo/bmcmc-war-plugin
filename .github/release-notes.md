@@ -1,6 +1,11 @@
-Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** before starting this version: the world, site and dynmap settings moved into a new `maps` section (the old file still loads, as a single map).
+Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** if you still have one from before 0.8.0: the world, site and dynmap settings moved into a `maps` section (the old file still loads, as a single map). The keys new in 0.9.0 have defaults, so a 0.8.0 file works as it is.
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
+
+### New in 0.9.0
+- **Capitulation is announced.** When a nation of the war Capitulates (its capital taken and its score over 100, 7.9.7), the chat says so and everyone fighting in the war or standing on its map sees it on screen. `announce.capitulated: false` turns it off.
+- **A capitulation ends the engagement.** The engagement going on is over the moment a nation Capitulates (a Raid's fort goes back as usual); the staff starts the next one. `engagement.end-on-capitulation: false` keeps it going.
+- A nation that had already capitulated when the server starts is not announced again.
 
 ### New in 0.8.0
 - **Several maps at once.** The new `maps` section lists every world wars are fought in, each with its own `territories.json` from the site (cities, limits, wars, countries) and its own dynmap world; each map has its own front, engagements and captures, and they all run at the same time (Gaia and an event map, say). Only players standing in a map's world count there. A war's ready check does not ask players who are in another map's world. `/bmcwar where` and `/bmcwar status` say which map; when two maps have wars with the same id, commands take `map:id`.

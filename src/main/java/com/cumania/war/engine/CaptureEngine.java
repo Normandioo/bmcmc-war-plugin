@@ -25,11 +25,13 @@ public final class CaptureEngine {
         public Present(String player, int side, double x, double z) { this(player, side, x, z, 0); }
     }
 
-    public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED, ENGAGEMENT_END }
+    public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED, ENGAGEMENT_END, CAPITULATED }
 
     /**
      * side = the side taking it (CAPTURED, START) or the one that was; from = who held it. city = the unit's first locality,
      * unit = all of its localities (more than one for a Warzone). ENGAGEMENT_END has no city.
+     * CAPITULATED: a nation has just Capitulated (7.9.7); city = its capital, side = the nation's side, from = 1 when the engagement
+     * going on was ended because of it (engagement.end-on-capitulation), else 0.
      */
     public record Event(Type type, SiteData.War war, SiteData.City city, int side, int from, List<SiteData.City> unit) {
         public Event(Type type, SiteData.War war, SiteData.City city, int side, int from) { this(type, war, city, side, from, city == null ? List.of() : List.of(city)); }
@@ -60,7 +62,13 @@ public final class CaptureEngine {
     private final Map<String, WarGraph> graphs = new HashMap<>();                // war id -> the front as of the last tick
     private final Map<String, Engagement> engagements = new HashMap<>();         // war id -> the Engagement going on
 
+    private final Map<String, java.util.Set<String>> capitulated = new HashMap<>(); // war id -> nations Capitulated as of the last tick
+    private boolean endOnCapitulation = true;
+
     public CaptureEngine(Rules rules, Markers markers) { this.rules = rules; this.markers = markers; }
+
+    /** Whether the engagement going on ends when a nation of the war Capitulates (default true). */
+    public CaptureEngine endOnCapitulation(boolean on) { endOnCapitulation = on; return this; }
 
     public Rules rules() { return rules; }
 
@@ -147,6 +155,25 @@ public final class CaptureEngine {
         }
         WarGraph g = WarGraph.solve(site, war, markers, rules.encirclement());
         graphs.put(war.id(), g);
+        // a nation that has just Capitulated (7.9.7): said once, and the engagement going on ends (nothing more is captured this tick)
+        java.util.Set<String> now = new java.util.LinkedHashSet<>();
+        List<Capitulation.Score> fallen = new ArrayList<>();
+        java.util.Set<String> before = capitulated.get(war.id());
+        for (Capitulation.Score c : Capitulation.of(site, war, g)) {
+            if (!c.capitulated()) continue;
+            now.add(c.nation());
+            if (before != null && !before.contains(c.nation())) fallen.add(c);   // the first look only takes stock: no news on start
+        }
+        capitulated.put(war.id(), now);
+        if (!fallen.isEmpty()) {
+            boolean end = endOnCapitulation && eng != null && !eng.waiting();
+            if (end) { stopEngagement(site, war); eng = null; }
+            for (Capitulation.Score c : fallen) events.add(new Event(Type.CAPITULATED, war, c.capital(), c.side(), end ? 1 : 0));
+            if (end) {
+                graphs.put(war.id(), g = WarGraph.solve(site, war, markers, rules.encirclement()));   // a Raid's fort may have gone back
+                return events;
+            }
+        }
         int sides = war.sides().size();
 
         Map<String, int[]> counts = new LinkedHashMap<>();
