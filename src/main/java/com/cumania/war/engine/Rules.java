@@ -36,8 +36,9 @@ public record Rules(Map<String, Double> secondsByKind, double defaultSeconds, do
 
     /** Seconds a side must stay in the city, with no one of the holding side inside, to take it. */
     public double secondsFor(SiteData.City city) {
-        Double seconds = secondsByKind.get(city.baseKind());
-        if (seconds == null) seconds = secondsByKind.get(city.category().label);
+        // the category first: a capital drawn as a Locality is a Fort (5.6.7), and must not get the "Locality" time by its kind's name
+        Double seconds = secondsByKind.get(city.category().label);
+        if (seconds == null) seconds = secondsByKind.get(city.baseKind());
         if (seconds == null) seconds = lawSeconds(city.category());
         return city.capital() ? seconds * capitalMultiplier : seconds;
     }

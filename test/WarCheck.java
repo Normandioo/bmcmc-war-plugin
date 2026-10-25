@@ -225,6 +225,11 @@ public class WarCheck {
         ev = run(eng, site, war, List.of(at(sfort, fenemy)), 12);
         check(captured(ev, sfort), "15 s with no enemy inside do");
 
+        // 12. with the config's times (Settlement / Fort / Locality), a capital drawn as a Locality is still a Fort: 15 s, not 0
+        Rules cfg = new Rules(Map.of("Settlement", 30.0, "Fort", 15.0, "Locality", 0.0), 0, 1, true, 0, 0, 1, -1, Map.of(), true, true, true);
+        check(cfg.secondsFor(site.city("sakurajiin(greneshire)")) == 15, "a LocalityCapital with the config's times: 15 s (" + cfg.secondsFor(site.city("sakurajiin(greneshire)")) + ")");
+        check(cfg.secondsFor(cubatao) == 0 && cfg.secondsFor(itapecuru) == 30, "a plain Locality still 0 s, a Small capital 30 s");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.10.2
+- **Fix: a capital drawn as a Locality fell at once.** A capital that is not a Settlement is a Fort (15 s, 5.6.7), but with the config's times its kind's name ("Locality") was matched first and gave it 0 s. Siesta (the Diarchy's capital) and the like now take 15 s.
+
 ### New in 0.10.1
 - **Resistance resets the clock, as the Laws say.** A Fort is only taken after 15 s, a Settlement after 30 s, of no enemy presence (7.8.5-6): when the defenders leave a contested city, the attackers' time starts over. Before, it went on from where it stopped, so a city nearly taken before the defenders came fell the second they left. A Locality is still taken the moment the resistance is gone (7.8.3). If your config says `on-resistance: pause`, change it to `reset` (or delete the config).
 
