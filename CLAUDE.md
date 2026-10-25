@@ -67,7 +67,7 @@ Chaves: `format, world, dimension, generated, countries, provinces, localities, 
   javac -d out -cp gson.jar $(find src/main/java/com/cumania/war/site src/main/java/com/cumania/war/engine -name '*.java') test/EngineCheck.java
   java -cp out:gson.jar EngineCheck docs/territories-sample.json
   ```
-  Os casos 1–6 usam os **valores antigos em minutos × 60** (600, 900...); os casos 7–10 (cidade neutra, cidade de 0 s, marcador ausente, `clear()`) usam a regra atual do `config.yml`. A checagem da LombriganWar só exige que ela exista com dois lados (no exemplo ela está `live=false`). Caso 11: limite de captura (`zones`); caso 12: cor no tipo; 13–16: tag, vassalo, subsolo, reset. Estado atual: 40/40 ok. Mais `test/WarCheck.java` (Law 7 + Engagement em espera + capitulação) 38/38. No sandbox, o Gson está em `/opt/apache-maven-*/lib/gson-*.jar`.
+  Os casos 1–6 usam os **valores antigos em minutos × 60** (600, 900...); os casos 7–10 (cidade neutra, cidade de 0 s, marcador ausente, `clear()`) usam a regra atual do `config.yml`. A checagem da LombriganWar só exige que ela exista com dois lados (no exemplo ela está `live=false`). Caso 11: limite de captura (`zones`); caso 12: cor no tipo; 13–16: tag, vassalo, subsolo, reset. Estado atual: 40/40 ok. Mais `test/WarCheck.java` (Law 7 + Engagement em espera + capitulação) 39/39. No sandbox, o Gson está em `/opt/apache-maven-*/lib/gson-*.jar`.
 - `test/DynmapCheck.java` testa o adaptador com marcadores falsos (precisa do `dynmap-api` no classpath).
 
 ## O que NUNCA foi verificado (fazer primeiro num servidor de teste)
