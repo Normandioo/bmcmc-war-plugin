@@ -37,9 +37,11 @@ capture:
   # A capital takes this many times as long as its type says.
   capital-multiplier: 1
   # Someone of the side that holds the city inside it is resistance: the city shows as contested.
-  # pause = the timer stops while an opponent is inside and goes on from where it was when he leaves;
-  # reset = the time starts over when the resistance ends.
-  on-resistance: pause
+  # reset = the time starts over when the resistance ends: a Fort is only taken after 15 s, a Settlement after 30 s, of no enemy
+  #         presence (Laws 7.8.5-6). A Locality is taken the moment the resistance is gone (7.8.3).
+  # pause = the timer stops while an opponent is inside and goes on from where it was when he leaves (NOT the Laws: a city
+  #         nearly taken before the defenders came falls the second they leave).
+  on-resistance: reset
   # Seconds the attackers may be out of the city before the attempt is dropped (0 = dropped the moment they leave).
   grace-seconds: 0
   # Seconds after a city is taken during which it cannot be taken again (0 = no cooldown).

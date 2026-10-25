@@ -213,6 +213,18 @@ public class WarCheck {
         ev = run(eng, site, war, List.of(at(southern, 0)), 4);
         check(eng.engagement(war) != null && ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN), "with end-on-objective off the Assault goes on");
 
+        // 11. resistance resets the clock (7.8.5: 15 s of no enemy presence)
+        icons.clear();
+        eng = new CaptureEngine(new Rules(Map.of(), 0, 1, true, 0, 0, 1, -1, Map.of(), false, true, false), MARKERS);
+        SiteData.City sfort = site.city("sakurajiin(greneshire)");   // a capital that is not a Settlement: a Fort, 15 s
+        int fowner = site.sideOfCity(war, sfort), fenemy = 1 - fowner;
+        run(eng, site, war, List.of(at(sfort, fenemy)), 12);
+        run(eng, site, war, List.of(at(sfort, fenemy), at(sfort, fowner)), 5);
+        ev = run(eng, site, war, List.of(at(sfort, fenemy)), 3);
+        check(!captured(ev, sfort), "12 s, then defenders came and left: 3 s more do not take the Fort");
+        ev = run(eng, site, war, List.of(at(sfort, fenemy)), 12);
+        check(captured(ev, sfort), "15 s with no enemy inside do");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

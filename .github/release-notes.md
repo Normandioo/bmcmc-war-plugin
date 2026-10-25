@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.10.1
+- **Resistance resets the clock, as the Laws say.** A Fort is only taken after 15 s, a Settlement after 30 s, of no enemy presence (7.8.5-6): when the defenders leave a contested city, the attackers' time starts over. Before, it went on from where it stopped, so a city nearly taken before the defenders came fell the second they left. A Locality is still taken the moment the resistance is gone (7.8.3). If your config says `on-resistance: pause`, change it to `reset` (or delete the config).
+
 ### New in 0.10.0
 - **Tactical Campaigns, Assaults and Raids end when their objective is taken.** As soon as one side holds every target, having taken at least one of them since the engagement began, it is over: the chat says which side took it, and everyone in the war or on its map sees it on screen. In a Raid, that is the attackers capturing the Fort (7.17.10); the Fort then goes back as always (7.17.13). A Raid's defender standing in its own Fort ends nothing. `engagement.end-on-objective: false` keeps them going until their time runs out.
 

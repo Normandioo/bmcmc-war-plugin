@@ -88,7 +88,7 @@ public final class BmcWarPlugin extends JavaPlugin {
         if (!old.isEmpty()) getLogger().warning("capture.seconds now goes by Settlement / Fort / Locality (Laws 7.8.5-6); the old keys " + old
                 + " are ignored and the Laws' times are used (Settlement 30 s, Fort 15 s, Locality at once). Delete plugins/BmcWar/config.yml to get the new one.");
         Rules rules = new Rules(seconds, 0, c.getDouble("capture.capital-multiplier", 1),
-                !"pause".equalsIgnoreCase(c.getString("capture.on-resistance", "pause")), Math.max(0, c.getDouble("capture.grace-seconds", 0)),
+                !"pause".equalsIgnoreCase(c.getString("capture.on-resistance", "reset")), Math.max(0, c.getDouble("capture.grace-seconds", 0)),
                 Math.max(0, c.getDouble("capture.cooldown-seconds", 0)), Math.max(1, c.getInt("capture.min-attackers", 1)),
                 c.getInt("capture.underground.max-depth", 10), depthByCity(c.getConfigurationSection("capture.underground.cities")),
                 c.getBoolean("rules.in-play", true), c.getBoolean("rules.encirclement", true), c.getBoolean("rules.require-engagement", true));
