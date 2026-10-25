@@ -1,6 +1,9 @@
-Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** if you still have one from before 0.8.0: the world, site and dynmap settings moved into a `maps` section (the old file still loads, as a single map). The keys new in 0.9.0 have defaults, so a 0.8.0 file works as it is.
+Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap is recommended (without it captures work but nothing shows on the map). **Delete `plugins/BmcWar/config.yml`** if you still have one from before 0.8.0: the world, site and dynmap settings moved into a `maps` section (the old file still loads, as a single map). The keys new since 0.9.0 have defaults, so a 0.8.0 file works as it is.
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
+
+### New in 0.10.0
+- **Tactical Campaigns, Assaults and Raids end when their objective is taken.** As soon as one side holds every target, having taken at least one of them since the engagement began, it is over: the chat says which side took it, and everyone in the war or on its map sees it on screen. In a Raid, that is the attackers capturing the Fort (7.17.10); the Fort then goes back as always (7.17.13). A Raid's defender standing in its own Fort ends nothing. `engagement.end-on-objective: false` keeps them going until their time runs out.
 
 ### New in 0.9.0
 - **Capitulation is announced.** When a nation of the war Capitulates (its capital taken and its score over 100, 7.9.7), the chat says so and everyone fighting in the war or standing on its map sees it on screen. `announce.capitulated: false` turns it off.

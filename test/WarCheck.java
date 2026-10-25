@@ -80,7 +80,7 @@ public class WarCheck {
 
         // 4. Engagements (7.8.8)
         icons.clear();
-        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnObjective(false);   // the objective rule is case 10
         ev = run(eng, site, war, List.of(at(southern, 0)), 5);
         check(ev.isEmpty(), "no engagement: nothing is captured");
         eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(site.city("northerncolony(lombriga)").key()), 20, "test");
@@ -97,7 +97,7 @@ public class WarCheck {
 
         // 4b. an engagement waiting for everyone to be ready: nothing until it begins, and its time runs from then
         icons.clear();
-        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnObjective(false);   // the objective rule is case 10
         eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(southern.key()), 20, "test", true);
         ev = run(eng, site, war, List.of(at(southern, 0)), 30 * 60);
         check(ev.isEmpty() && eng.engagement(war).waiting() && !icons.containsKey(southern.key()), "a waiting Assault captures nothing and does not run out (30 min)");
@@ -110,7 +110,7 @@ public class WarCheck {
 
         // 5. a Raid: its Fort need not be In Play, and goes back to who held it when the Raid ends (7.17.13)
         icons.clear();
-        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnObjective(false);   // the objective rule is case 10
         SiteData.City fort = site.city("fortedromcabelha(lombriga)");
         WarGraph.Unit fu = WarGraph.solve(site, war, MARKERS, true).unitOf(fort);
         eng.startEngagement(site, war, Engagement.Kind.RAID, Set.of(fort.key()), 30, "test");
@@ -152,7 +152,7 @@ public class WarCheck {
 
         // 9. a nation that Capitulates is announced once, and the engagement going on ends
         icons.clear();
-        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnObjective(false);   // the objective rule is case 10
         eng.startEngagement(site, war, Engagement.Kind.STRATEGIC, Set.of(), 60, "test");
         ev = run(eng, site, war, List.of(), 1);
         check(ev.isEmpty(), "nobody has capitulated: no news");
@@ -164,7 +164,7 @@ public class WarCheck {
         check(!captured(ev, southern) && !icons.containsKey(southern.key()), "nothing is captured in the tick the engagement ends");
         ev = run(eng, site, war, List.of(), 3);
         check(ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.CAPITULATED), "not said again");
-        eng = new CaptureEngine(rules(true, true), MARKERS);
+        eng = new CaptureEngine(rules(true, true), MARKERS).endOnObjective(false);   // the objective rule is case 10
         eng.startEngagement(site, war, Engagement.Kind.STRATEGIC, Set.of(), 60, "test");
         ev = run(eng, site, war, List.of(), 2);
         check(ev.isEmpty() && eng.engagement(war) != null, "a nation already capitulated when the plugin starts is not news and ends nothing");
@@ -176,6 +176,42 @@ public class WarCheck {
         ev = run(eng, site, war, List.of(), 1);
         check(ev.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPITULATED && e.from() == 0) && eng.engagement(war) != null,
                 "with end-on-capitulation off it is said, and the engagement goes on");
+
+        // 10. a Tactical Campaign, an Assault or a Raid ends when one side has taken its objective
+        icons.clear();
+        eng = new CaptureEngine(rules(false, true), MARKERS);
+        eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(southern.key(), cubatao.key()), 20, "test");
+        ev = run(eng, site, war, List.of(at(southern, 0)), 2);
+        check(eng.engagement(war) != null && captured(ev, southern), "one of two targets taken: the Assault goes on");
+        ev = run(eng, site, war, List.of(at(cubatao, 0)), 3);
+        var obj = ev.stream().filter(e -> e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN).toList();
+        check(obj.size() == 1 && obj.get(0).side() == 0 && obj.get(0).unit().size() == 2 && eng.engagement(war) == null, "both taken: the Assault is over, won by side 0");
+        icons.clear();
+        eng = new CaptureEngine(rules(false, true), MARKERS);
+        eng.startEngagement(site, war, Engagement.Kind.RAID, Set.of(fort.key()), 30, "test");
+        ev = run(eng, site, war, List.of(at(fort, 1)), 20);
+        check(ev.isEmpty() && eng.engagement(war) != null, "a Raid's defender standing in its own Fort wins nothing yet");
+        ev = run(eng, site, war, List.of(at(fort, 0)), 18);
+        check(ev.stream().anyMatch(e -> e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN && e.side() == 0) && eng.engagement(war) == null && !icons.containsKey(fort.key()),
+                "the attackers capture the Fort: the Raid is over and the Fort goes back (7.17.10, 7.17.13)");
+        icons.clear();
+        eng = new CaptureEngine(rules(false, true), MARKERS);
+        SiteData.City colony = site.city("northerncolony(lombriga)");   // not a capital: taking it does not make Lombriga capitulate
+        SiteData.City own = site.city("forestprovince(eleyetia)");
+        int ownSide = site.sideOfCity(war, own);
+        eng.startEngagement(site, war, Engagement.Kind.TACTICAL, Set.of(colony.key(), own.key()), 40, "test");
+        int lombSide = site.sideOfCity(war, colony);
+        check(lombSide >= 0 && ownSide >= 0 && lombSide != ownSide, "NorthernColony and ForestProvince are on opposite sides");
+        ev = run(eng, site, war, List.of(at(colony, ownSide)), 1);
+        check(captured(ev, colony) && eng.engagement(war) != null, "a Tactical Campaign over one city of each side: NorthernColony (at once) is taken, still on that second");
+        ev = run(eng, site, war, List.of(at(colony, ownSide)), 3);
+        check(eng.engagement(war) == null && ev.stream().anyMatch(e -> e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN && e.side() == ownSide),
+                "next second: one side holds the whole Conflict Area, the Tactical Campaign is over (7.13.8)");
+        icons.clear();
+        eng = new CaptureEngine(rules(false, true), MARKERS).endOnObjective(false);
+        eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(southern.key()), 20, "test");
+        ev = run(eng, site, war, List.of(at(southern, 0)), 4);
+        check(eng.engagement(war) != null && ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN), "with end-on-objective off the Assault goes on");
 
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);

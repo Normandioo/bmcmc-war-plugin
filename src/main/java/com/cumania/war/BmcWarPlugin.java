@@ -121,7 +121,8 @@ public final class BmcWarPlugin extends JavaPlugin {
                 m.dynmap = null;
                 m.markers = new MemoryMarkers();
             }
-            m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(c.getBoolean("engagement.end-on-capitulation", true));
+            m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(c.getBoolean("engagement.end-on-capitulation", true))
+                    .endOnObjective(c.getBoolean("engagement.end-on-objective", true));
             for (WarMap o : old2) if (o.url.equals(m.url)) m.site = o.site;   // keep what was downloaded while the new data arrives
             if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
                 try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
@@ -466,6 +467,24 @@ public final class BmcWarPlugin extends JavaPlugin {
         }
     }
 
+    /** One side took every target of a Tactical Campaign, an Assault or a Raid: it is over. */
+    private void objectiveTaken(CaptureEngine.Event e) {
+        if (ready != null) ready.stop(e.war());
+        String targets = String.join(", ", e.unit().stream().map(SiteData.City::name).toList());
+        getLogger().info("[" + e.war().id() + "] objective taken by side " + e.side() + " (" + targets + "); engagement ended");
+        broadcast(e.war(), side(e.war(), e.side()).append(Component.text(" took " + (e.unit().size() > 1 ? "every target (" + targets + ")" : targets)
+                + ": the engagement is over.", NamedTextColor.GOLD)));
+        WarMap map = mapOf(e.war());
+        SiteData s = map == null ? null : map.site;
+        Title title = Title.title(Component.text(e.war().sides().get(e.side()).name() + " wins", sideColor(e.war(), e.side())),
+                Component.text("Objective taken: the engagement is over", NamedTextColor.GOLD),
+                Title.Times.times(java.time.Duration.ofMillis(400), java.time.Duration.ofSeconds(4), java.time.Duration.ofMillis(800)));
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            boolean here = map != null && p.getWorld().getName().equals(map.world);
+            if (here || s != null && sideOf(p, s, e.war()) >= 0) p.showTitle(title);
+        }
+    }
+
     /** The chat line for what happened, if the config wants it said. */
     private void announce(CaptureEngine.Event e) {
         var c = getConfig();
@@ -476,6 +495,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             return;
         }
         if (e.type() == CaptureEngine.Type.CAPITULATED) { capitulated(e); return; }
+        if (e.type() == CaptureEngine.Type.OBJECTIVE_TAKEN) { objectiveTaken(e); return; }
         String where = e.label() + " (" + e.city().country() + ")";
         Component prefix = Component.text("[" + e.war().name() + "] ", NamedTextColor.RED);
         Component line = null;

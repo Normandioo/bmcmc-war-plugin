@@ -25,13 +25,15 @@ public final class CaptureEngine {
         public Present(String player, int side, double x, double z) { this(player, side, x, z, 0); }
     }
 
-    public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED, ENGAGEMENT_END, CAPITULATED }
+    public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED, ENGAGEMENT_END, CAPITULATED, OBJECTIVE_TAKEN }
 
     /**
      * side = the side taking it (CAPTURED, START) or the one that was; from = who held it. city = the unit's first locality,
      * unit = all of its localities (more than one for a Warzone). ENGAGEMENT_END has no city.
      * CAPITULATED: a nation has just Capitulated (7.9.7); city = its capital, side = the nation's side, from = 1 when the engagement
      * going on was ended because of it (engagement.end-on-capitulation), else 0.
+     * OBJECTIVE_TAKEN: one side holds every target of a Tactical Campaign, an Assault or a Raid, having taken at least one of them since
+     * it began, so it is over (engagement.end-on-objective); side = that side, unit = the targets.
      */
     public record Event(Type type, SiteData.War war, SiteData.City city, int side, int from, List<SiteData.City> unit) {
         public Event(Type type, SiteData.War war, SiteData.City city, int side, int from) { this(type, war, city, side, from, city == null ? List.of() : List.of(city)); }
@@ -64,11 +66,46 @@ public final class CaptureEngine {
 
     private final Map<String, java.util.Set<String>> capitulated = new HashMap<>(); // war id -> nations Capitulated as of the last tick
     private boolean endOnCapitulation = true;
+    private boolean endOnObjective = true;
+    private final Map<String, Engagement> heldSince = new HashMap<>();             // war id -> the Engagement the holders below are of
+    private final Map<String, Map<String, Integer>> heldAtStart = new HashMap<>(); // war id -> target key -> who held it when it began
 
     public CaptureEngine(Rules rules, Markers markers) { this.rules = rules; this.markers = markers; }
 
     /** Whether the engagement going on ends when a nation of the war Capitulates (default true). */
     public CaptureEngine endOnCapitulation(boolean on) { endOnCapitulation = on; return this; }
+
+    /** Whether a Tactical Campaign, an Assault or a Raid ends when one side takes all of its targets (default true). */
+    public CaptureEngine endOnObjective(boolean on) { endOnObjective = on; return this; }
+
+    /**
+     * The side that has taken the objective of this engagement: it holds every target, and at least one of them was not its own when
+     * the engagement began (a Raid's defender holding its Fort has won nothing yet). -1 when none has.
+     */
+    private int objectiveTakenBy(SiteData site, SiteData.War war, WarGraph g, Engagement e) {
+        if (e == null || e.waiting() || e.targets().isEmpty()) return -1;
+        if (e.kind() != Engagement.Kind.TACTICAL && e.kind() != Engagement.Kind.ASSAULT && e.kind() != Engagement.Kind.RAID) return -1;
+        Map<String, Integer> now = new HashMap<>();
+        for (String key : e.targets()) {
+            SiteData.City c = site.city(key);
+            WarGraph.Unit u = c == null ? null : g.unitOf(c);
+            if (u == null) return -1;
+            now.put(key, u.control);
+        }
+        if (heldSince.get(war.id()) != e) {   // the first look at this engagement since it began: who held what then
+            heldSince.put(war.id(), e);
+            heldAtStart.put(war.id(), now);
+            return -1;
+        }
+        int side = -1;
+        for (int h : now.values()) {
+            if (h < 0 || side >= 0 && h != side) return -1;
+            side = h;
+        }
+        Map<String, Integer> start = heldAtStart.get(war.id());
+        for (Map.Entry<String, Integer> t : now.entrySet()) if (!t.getValue().equals(start.get(t.getKey()))) return side;
+        return -1;
+    }
 
     public Rules rules() { return rules; }
 
@@ -173,6 +210,16 @@ public final class CaptureEngine {
                 graphs.put(war.id(), g = WarGraph.solve(site, war, markers, rules.encirclement()));   // a Raid's fort may have gone back
                 return events;
             }
+        }
+        // a Tactical Campaign, an Assault or a Raid whose targets one side has taken is over
+        int won = endOnObjective ? objectiveTakenBy(site, war, g, eng) : -1;
+        if (won >= 0) {
+            List<SiteData.City> targets = new ArrayList<>();
+            for (String key : eng.targets()) { SiteData.City c = site.city(key); if (c != null) targets.add(c); }
+            stopEngagement(site, war);
+            events.add(new Event(Type.OBJECTIVE_TAKEN, war, targets.get(0), won, -1, targets));
+            graphs.put(war.id(), WarGraph.solve(site, war, markers, rules.encirclement()));   // a Raid's fort has gone back
+            return events;
         }
         int sides = war.sides().size();
 

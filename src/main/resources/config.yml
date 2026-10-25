@@ -93,6 +93,9 @@ rules:
 engagement:
   # When a nation of the war Capitulates (its capital taken and its score over 100, 7.9.7), the engagement going on ends.
   end-on-capitulation: true
+  # A Tactical Campaign, an Assault or a Raid ends as soon as one side holds all of its targets, having taken at least one of them
+  # (a Raid: the attackers capture the Fort, 7.17.10; the Fort then goes back as always, 7.17.13).
+  end-on-objective: true
   # How long each kind of Engagement lasts at most, in minutes (the Laws' times); it ends by itself then. "free" has no limit.
   minutes:
     strategic: 60
