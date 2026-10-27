@@ -405,7 +405,7 @@ public final class BmcWarPlugin extends JavaPlugin {
                 var at = new CaptureEngine.Present(p.getName(), side, loc.getX(), loc.getZ(), depthUnderground(p));
                 present.add(at); who.put(at, p);
             }
-            for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) announce(e);
+            for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) { record(e, present); announce(e); }
             if (getConfig().getBoolean("announce.actionbar", true)) for (var e : who.entrySet()) actionBar(engine, s, war, e.getKey(), e.getValue());
         }
     }
@@ -440,6 +440,61 @@ public final class BmcWarPlugin extends JavaPlugin {
     }
 
     /** Says something about a war to everyone. */
+    // ----- The match log: what happened in each war and when, for the Referee (/bmcwar log, plugins/BmcWar/logs) -----
+
+    private static final int LOG_KEPT = 300;
+    private final Map<String, java.util.ArrayDeque<String>> logs = new HashMap<>();
+    private static final java.time.format.DateTimeFormatter STAMP = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** Writes a line in the war's log: kept in memory for /bmcwar log and appended to plugins/BmcWar/logs/<war>.log. */
+    void log(SiteData.War war, String text) {
+        String id = warId(war);
+        String line = java.time.LocalDateTime.now().format(STAMP) + "  " + text;
+        java.util.ArrayDeque<String> mem = logs.computeIfAbsent(id, k -> new java.util.ArrayDeque<>());
+        mem.addLast(line);
+        while (mem.size() > LOG_KEPT) mem.removeFirst();
+        try {
+            Path file = getDataFolder().toPath().resolve("logs").resolve(id.replace(':', '-') + ".log");
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, line + System.lineSeparator(), java.nio.charset.StandardCharsets.UTF_8,
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+        } catch (Exception ex) { getLogger().warning("Could not write the war log: " + ex); }
+    }
+
+    /** The latest lines of a war's log (since the server started; the full log is in plugins/BmcWar/logs). */
+    List<String> logLines(SiteData.War war, int n) {
+        java.util.ArrayDeque<String> mem = logs.get(warId(war));
+        if (mem == null) return List.of();
+        List<String> all = new ArrayList<>(mem);
+        return all.subList(Math.max(0, all.size() - n), all.size());
+    }
+
+    private String sideName(SiteData.War war, int side) {
+        return side >= 0 && side < war.sides().size() ? war.sides().get(side).name() : side == Markers.CONTESTED ? "contested" : side == Markers.UNCONTROLLED ? "uncontrolled" : "nobody";
+    }
+
+    /** One line in the log for what the engine said happened, with who was standing in the locality. */
+    private void record(CaptureEngine.Event e, List<CaptureEngine.Present> present) {
+        SiteData.War war = e.war();
+        if (e.type() == CaptureEngine.Type.ENGAGEMENT_END) { log(war, "ENGAGEMENT OVER (its time ran out)"); return; }
+        String where = e.label() + " (" + e.city().country() + ")";
+        List<String> inside = new ArrayList<>();
+        for (CaptureEngine.Present p : present) {
+            if (e.unit().stream().anyMatch(c -> c.area().contains(p.x(), p.z()))) inside.add(p.player() + " [" + sideName(war, p.side()) + "]");
+        }
+        String who = inside.isEmpty() ? "" : "; inside: " + String.join(", ", inside);
+        log(war, switch (e.type()) {
+            case START -> "START " + where + " by " + sideName(war, e.side()) + who;
+            case CONTESTED -> "CONTESTED " + where + who;
+            case CLEARED -> "CLEARED " + where + " (the resistance left; the time starts over)" + who;
+            case ABORTED -> "ABORTED " + where + " (the attackers left or it can no longer be captured)";
+            case CAPTURED -> "CAPTURED " + where + " by " + sideName(war, e.side()) + " from " + sideName(war, e.from()) + who;
+            case CAPITULATED -> e.city().country() + " CAPITULATED (capital " + e.city().name() + " taken)" + (e.from() == 1 ? "; the engagement is over" : "");
+            case OBJECTIVE_TAKEN -> "OBJECTIVE TAKEN by " + sideName(war, e.side()) + " (" + String.join(", ", e.unit().stream().map(SiteData.City::name).toList()) + "); the engagement is over";
+            default -> e.type() + " " + where;
+        });
+    }
+
     void broadcast(SiteData.War war, Component text) {
         Bukkit.getServer().broadcast(Component.text("[" + war.name() + "] ", NamedTextColor.RED).append(text));
     }

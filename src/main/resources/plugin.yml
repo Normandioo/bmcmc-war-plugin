@@ -7,14 +7,14 @@ softdepend: [dynmap]
 commands:
   bmcwar:
     description: Status of the wars, and staff tools
-    usage: /bmcwar status | where | engagement [start <kind> [cities...] | stop] | set <city> <state> | reset [war] confirm | reload
+    usage: /bmcwar status | where | table | debug | engagement [start <kind> [cities...] | go | pause | resume | stop] | undo [war] | log [war] [lines] | set <city> <state> | reset [war] confirm | reload
     permission: bmcwar.use
 permissions:
   bmcwar.use:
     description: See the status of captures and where you stand
     default: true
   bmcwar.admin:
-    description: Start and stop engagements, set a city's colour by hand, reset the fronts and reload the plugin
+    description: The Referee's tools - start, pause and stop engagements, undo captures, read the war log, set a city's colour by hand, reset the fronts and reload the plugin
     default: op
   bmcwar.bypass:
     description: Not counted when standing in a city (for staff watching a capture)

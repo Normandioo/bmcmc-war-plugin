@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | stop [war]] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -41,6 +41,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "where" -> where(sender);
             case "set" -> { if (admin(sender)) set(sender, args); }
             case "reset" -> { if (admin(sender)) reset(sender, args); }
+            case "undo" -> { if (admin(sender)) undo(sender, args); }
+            case "log" -> { if (admin(sender)) log(sender, args); }
             case "engagement", "eng" -> engagement(sender, args);
             case "table", "capitulation", "cap" -> {
                 if (!(sender instanceof Player p)) { say(sender, "Only a player can show the table.", NamedTextColor.GRAY); return true; }
@@ -109,7 +111,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         Engagement e = plugin.engine(war).engagement(war);
         if (e == null) return plugin.rules().requireEngagement() ? "No engagement: nothing can be captured now (7.8.8)." : "No engagement (captures are allowed anyway: rules.require-engagement is off).";
         if (e.waiting()) return e.kind().label + " called, waiting for everyone to be ready (/bmcwar engagement go to begin it anyway).";
-        String left = Double.isInfinite(e.endsAt()) ? "until stopped" : BmcWarPlugin.clock(e.endsAt() - plugin.engine(war).clock(war)) + " left";
+        String left = Double.isInfinite(e.endsAt()) ? "until stopped" : BmcWarPlugin.clock(e.left(plugin.engine(war).clock(war))) + " left";
+        if (e.paused()) return e.kind().label + " PAUSED by the Referee (" + left + "; /bmcwar engagement resume to go on).";
         String targets = e.targets().isEmpty() ? "the whole Theater" : names(plugin.site(war), e.targets());
         return e.kind().label + " going on (" + left + "), over " + targets + ".";
     }
@@ -166,6 +169,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                     case NOT_IN_PLAY -> "It cannot be captured now: it is not In Play (7.8.1).";
                     case NO_ENGAGEMENT -> "It cannot be captured now: no engagement is going on (7.8.8).";
                     case WAITING -> "It cannot be captured yet: the engagement begins when everyone is ready.";
+                    case PAUSED -> "It cannot be captured now: the Referee paused the engagement.";
                     case NOT_A_TARGET -> "It cannot be captured now: it is not a target of the engagement going on.";
                 }), why == null ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
                 int mark = map.markers.read(war, city), owner = site.sideOfCity(war, city);
@@ -211,6 +215,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         if (war == null) { say(sender, "No war is being run on " + map.name + ".", NamedTextColor.RED); return; }
         if (!map.markers.write(war, city, state)) { say(sender, "The icon could not be changed (see the console).", NamedTextColor.RED); return; }
         map.engine.forget(war, city);
+        plugin.log(war, "SET " + city.name() + " (" + city.country() + ") to " + args[2].toLowerCase(Locale.ROOT) + " by " + sender.getName());
         say(sender, city.name() + " is now " + args[2].toLowerCase(Locale.ROOT) + " in " + war.name() + ".", NamedTextColor.GREEN);
     }
 
@@ -223,7 +228,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         for (int i = 2; i < args.length; i++) {
             if (args[i].toLowerCase(Locale.ROOT).startsWith("war=")) warId = args[i].substring(4); else rest.add(args[i]);
         }
-        if ((action.equals("stop") || action.equals("go")) && warId == null && !rest.isEmpty()) warId = rest.remove(0);
+        if ((action.equals("stop") || action.equals("go") || action.equals("pause") || action.equals("resume")) && warId == null && !rest.isEmpty()) warId = rest.remove(0);
         List<SiteData.War> wars = plugin.handledWars();
         if (wars.isEmpty()) { say(sender, "No war is being run.", NamedTextColor.RED); return; }
         SiteData.War war = pick(sender, wars, warId);
@@ -255,13 +260,29 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             plugin.broadcast(war, Component.text("The " + e.kind().label.toLowerCase(Locale.ROOT) + " is over" + (e.kind() == Engagement.Kind.RAID
                     ? ": the raided fort goes back to who held it (7.17.13)." : ". Captures stop until the next engagement."), NamedTextColor.GOLD));
             plugin.getLogger().info("[" + war.id() + "] engagement stopped by " + sender.getName());
+            plugin.log(war, "ENGAGEMENT STOPPED by " + sender.getName());
+            return;
+        }
+        if (action.equals("pause")) {
+            Engagement e = plugin.engine(war).pause(war);
+            if (e == null) { say(sender, "No engagement is going on in " + war.name() + " (or it is waiting for the ready check, or already paused).", NamedTextColor.GRAY); return; }
+            plugin.broadcast(war, Component.text("The Referee paused the " + e.kind().label.toLowerCase(Locale.ROOT) + ": nothing can be captured and its time stands still.", NamedTextColor.GOLD));
+            plugin.log(war, "ENGAGEMENT PAUSED by " + sender.getName());
+            return;
+        }
+        if (action.equals("resume")) {
+            Engagement e = plugin.engine(war).resume(war);
+            if (e == null) { say(sender, "No engagement is paused in " + war.name() + ".", NamedTextColor.GRAY); return; }
+            String left = Double.isInfinite(e.endsAt()) ? "" : " (" + BmcWarPlugin.clock(e.left(plugin.engine(war).clock(war))) + " left)";
+            plugin.broadcast(war, Component.text("The " + e.kind().label.toLowerCase(Locale.ROOT) + " goes on" + left + ".", NamedTextColor.GOLD));
+            plugin.log(war, "ENGAGEMENT RESUMED by " + sender.getName() + left);
             return;
         }
         if (action.equals("go")) {
             if (!plugin.ready().begin(war, sender.getName())) say(sender, "No engagement is waiting to begin in " + war.name() + ".", NamedTextColor.GRAY);
             return;
         }
-        if (!action.equals("start") || rest.isEmpty()) { say(sender, "Usage: /bmcwar engagement start <" + String.join("|", KINDS) + "> [war=<id>] [cities...] | go [war] | stop [war] | status", NamedTextColor.GRAY); return; }
+        if (!action.equals("start") || rest.isEmpty()) { say(sender, "Usage: /bmcwar engagement start <" + String.join("|", KINDS) + "> [war=<id>] [cities...] | go [war] | pause [war] | resume [war] | stop [war] | status", NamedTextColor.GRAY); return; }
         Engagement.Kind kind;
         try { kind = Engagement.Kind.valueOf(rest.remove(0).toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException ex) { say(sender, "The kind is one of: " + String.join(", ", KINDS), NamedTextColor.RED); return; }
@@ -298,6 +319,54 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                 + (e.targets().isEmpty() ? "the whole Theater" : names(site, e.targets())) + "." + (e.waiting() ? " It begins when everyone is ready." : ""), NamedTextColor.GOLD));
         plugin.ready().start(war, e);
         plugin.getLogger().info("[" + war.id() + "] " + kind + " started by " + sender.getName() + " over " + (e.targets().isEmpty() ? "the Theater" : e.targets()));
+        plugin.log(war, "ENGAGEMENT " + kind + (e.waiting() ? " CALLED" : " STARTED") + " by " + sender.getName() + " over " + (e.targets().isEmpty() ? "the whole Theater" : names(site, e.targets())));
+    }
+
+    /**
+     * /bmcwar undo [war]: the Referee undoes the latest capture the plugin made (7.10.6): its localities get back the icons they had
+     * just before. Again and again goes further back (up to 50 captures since the server started).
+     */
+    private void undo(CommandSender sender, String[] args) {
+        List<SiteData.War> wars = plugin.handledWars();
+        if (wars.isEmpty()) { say(sender, "No war is being run.", NamedTextColor.RED); return; }
+        String id = args.length > 1 ? args[1] : null;
+        SiteData.War war = pick(sender, wars, id);
+        if (war == null) {
+            if (id == null || plugin.warsNamed(id).isEmpty())
+                say(sender, id == null ? "Several wars are running: /bmcwar undo <war>, with one of: " + String.join(", ", wars.stream().map(plugin::warId).toList())
+                        : "No running war with the id " + id + ".", NamedTextColor.RED);
+            return;
+        }
+        CaptureEngine.Capture c = plugin.engine(war).undo(war);
+        if (c == null) { say(sender, "No capture to undo in " + war.name() + " (only captures made since the server started can be undone).", NamedTextColor.GRAY); return; }
+        String back = c.from() >= 0 && c.from() < war.sides().size() ? war.sides().get(c.from()).name() : "who held it before";
+        plugin.broadcast(war, Component.text("The Referee undid the capture of " + c.label() + " (" + c.members().get(0).country() + "): it is back with " + back + ".", NamedTextColor.GOLD));
+        plugin.log(war, "UNDO capture of " + c.label() + " by " + (c.side() >= 0 && c.side() < war.sides().size() ? war.sides().get(c.side()).name() : "?") + ", by " + sender.getName());
+        Engagement e = plugin.engine(war).engagement(war);
+        if (e == null) say(sender, "No engagement is going on now: if the capture had ended it (objective taken, capitulation), start a new one to go on.", NamedTextColor.GRAY);
+        int more = plugin.engine(war).captures(war).size();
+        if (more > 0) say(sender, more + " more capture(s) can be undone; the next is " + plugin.engine(war).captures(war).get(0).label() + ".", NamedTextColor.GRAY);
+    }
+
+    /** /bmcwar log [war] [lines]: the latest lines of the war's log (the full one is in plugins/BmcWar/logs). */
+    private void log(CommandSender sender, String[] args) {
+        List<SiteData.War> wars = plugin.handledWars();
+        if (wars.isEmpty()) { say(sender, "No war is being run.", NamedTextColor.RED); return; }
+        String id = null;
+        int n = 15;
+        for (int i = 1; i < args.length; i++) {
+            try { n = Math.max(1, Math.min(100, Integer.parseInt(args[i]))); } catch (NumberFormatException ex) { id = args[i]; }
+        }
+        SiteData.War war = pick(sender, wars, id);
+        if (war == null) {
+            if (id == null || plugin.warsNamed(id).isEmpty())
+                say(sender, id == null ? "Several wars are running: /bmcwar log <war>, with one of: " + String.join(", ", wars.stream().map(plugin::warId).toList())
+                        : "No running war with the id " + id + ".", NamedTextColor.RED);
+            return;
+        }
+        List<String> lines = plugin.logLines(war, n);
+        say(sender, war.name() + " log" + (lines.isEmpty() ? ": nothing yet since the server started." : " (latest " + lines.size() + "; all of it in plugins/BmcWar/logs):"), NamedTextColor.GOLD);
+        for (String l : lines) say(sender, l, NamedTextColor.GRAY);
     }
 
     /** The war a command is about: the one named (id or map:id), or the only one running. Null (and says why) when that is not clear. */
@@ -340,6 +409,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         say(sender, "Reset: " + done + " cities back with their own side" + (failed > 0 ? ", " + failed + " could not be changed (see the console)" : "") + ".", failed > 0 ? NamedTextColor.YELLOW : NamedTextColor.GREEN);
         Bukkit.getServer().broadcast(Component.text("[" + war.name() + "] ", NamedTextColor.RED).append(Component.text("The fronts were reset: every city is back with its own side.", NamedTextColor.WHITE)));
         plugin.getLogger().info("[" + war.id() + "] fronts reset by " + sender.getName() + ": " + done + " cities, " + failed + " failed");
+        plugin.log(war, "FRONTS RESET by " + sender.getName() + ": " + done + " cities back with their own side");
     }
 
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
@@ -353,11 +423,13 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             for (String s : STATES) if (s.startsWith(args[2].toLowerCase(Locale.ROOT))) out.add(s);
         } else if (args[0].equalsIgnoreCase("engagement") || args[0].equalsIgnoreCase("eng")) {
             String last = args[args.length - 1].toLowerCase(Locale.ROOT);
-            if (args.length == 2) { for (String s : List.of("status", "start", "go", "stop")) if (s.startsWith(last)) out.add(s); }
+            if (args.length == 2) { for (String s : List.of("status", "start", "go", "pause", "resume", "stop")) if (s.startsWith(last)) out.add(s); }
             else if (args.length == 3 && args[1].equalsIgnoreCase("start")) { for (String s : KINDS) if (s.startsWith(last)) out.add(s); }
             else if (args.length >= 4 && args[1].equalsIgnoreCase("start") && site != null) {
                 for (SiteData.City c : site.cities()) if (c.name().toLowerCase(Locale.ROOT).startsWith(last) && out.size() < 40) out.add(c.name());
             }
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("undo") || args[0].equalsIgnoreCase("log"))) {
+            for (SiteData.War w : plugin.handledWars()) if (plugin.warId(w).toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) out.add(plugin.warId(w));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("reset")) {
             for (SiteData.War w : plugin.handledWars()) if (plugin.warId(w).toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) out.add(plugin.warId(w));
             if ("confirm".startsWith(args[1].toLowerCase(Locale.ROOT))) out.add("confirm");

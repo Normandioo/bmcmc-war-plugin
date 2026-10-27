@@ -230,6 +230,25 @@ public class WarCheck {
         check(cfg.secondsFor(site.city("sakurajiin(greneshire)")) == 15, "a LocalityCapital with the config's times: 15 s (" + cfg.secondsFor(site.city("sakurajiin(greneshire)")) + ")");
         check(cfg.secondsFor(cubatao) == 0 && cfg.secondsFor(itapecuru) == 30, "a plain Locality still 0 s, a Small capital 30 s");
 
+        // 13. the Referee: pause and resume an engagement, undo the latest capture
+        icons.clear();
+        eng = new CaptureEngine(rules(false, true), MARKERS).endOnObjective(false);
+        eng.startEngagement(site, war, Engagement.Kind.ASSAULT, Set.of(itapecuru.key(), southern.key()), 20, "test");
+        run(eng, site, war, List.of(), 60);
+        check(eng.pause(war) != null && eng.engagement(war).paused() && eng.pause(war) == null, "an Assault is paused (and not twice)");
+        ev = run(eng, site, war, List.of(at(itapecuru, 0)), 40 * 60);
+        check(ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.CAPTURED || e.type() == CaptureEngine.Type.ENGAGEMENT_END) && !icons.containsKey(itapecuru.key()),
+                "while paused nothing is captured and it does not run out (40 min)");
+        check(eng.resume(war) != null && !eng.engagement(war).paused() && Math.round(eng.engagement(war).left(eng.clock(war))) == 19 * 60, "resumed with its 19 min left");
+        ev = run(eng, site, war, List.of(at(southern, 0)), 2);
+        check(captured(ev, southern) && icons.get(southern.key()) == 0, "then captures go on");
+        ev = run(eng, site, war, List.of(at(itapecuru, 0)), 31);
+        check(captured(ev, itapecuru) && eng.captures(war).size() == 2, "two captures remembered");
+        var undone = eng.undo(war);
+        check(undone != null && undone.members().get(0).equals(itapecuru) && !icons.containsKey(itapecuru.key()) && icons.get(southern.key()) == 0,
+                "undo puts back the latest only (Itapecuru), SouthernProvince stays taken");
+        check(eng.undo(war) != null && !icons.containsKey(southern.key()) && eng.undo(war) == null, "undo again: SouthernProvince back too; then nothing left to undo");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

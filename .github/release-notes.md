@@ -2,6 +2,11 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.11.0 - the Referee's tools (7.10.4-7.10.6)
+- **`/bmcwar engagement pause` / `resume`**: the Referee stops the engagement for a moment (a crash, a dispute): nothing can be captured and its time stands still; resumed, it goes on with the time it had left. Captures under way when it was paused start over.
+- **`/bmcwar undo [war]`**: undoes the latest capture; its localities get back the icons they had just before. Again goes one further back (up to 50, since the server started). An engagement the capture ended (objective taken, capitulation) is not started again: start a new one.
+- **War log**: every engagement called, begun, paused, resumed, stopped or over; every capture started, contested, cleared, abandoned or made, with who was standing inside; capitulations, objectives, undo, set and reset - with the time. `/bmcwar log [war] [lines]` shows the latest lines; the whole of it is in `plugins/BmcWar/logs/<war>.log`.
+
 ### New in 0.10.2
 - **Fix: a capital drawn as a Locality fell at once.** A capital that is not a Settlement is a Fort (15 s, 5.6.7), but with the config's times its kind's name ("Locality") was matched first and gave it 0 s. Siesta (the Diarchy's capital) and the like now take 15 s.
 

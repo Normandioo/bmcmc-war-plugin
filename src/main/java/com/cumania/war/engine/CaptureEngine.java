@@ -46,7 +46,7 @@ public final class CaptureEngine {
     }
 
     /** Why a locality cannot be captured right now (null = it can). */
-    public enum Blocked { NOT_IN_WAR, NOT_IN_PLAY, NO_ENGAGEMENT, WAITING, NOT_A_TARGET }
+    public enum Blocked { NOT_IN_WAR, NOT_IN_PLAY, NO_ENGAGEMENT, WAITING, PAUSED, NOT_A_TARGET }
 
     private static final class Progress {
         int side; double seconds; double absent; boolean contested;
@@ -65,6 +65,13 @@ public final class CaptureEngine {
     private final Map<String, Engagement> engagements = new HashMap<>();         // war id -> the Engagement going on
 
     private final Map<String, java.util.Set<String>> capitulated = new HashMap<>(); // war id -> nations Capitulated as of the last tick
+    /** A capture as it happened, so the Referee can undo it: the localities taken and the icon each had just before. */
+    public record Capture(SiteData.War war, List<SiteData.City> members, Map<String, Integer> before, int side, int from) {
+        public String label() { return members.size() > 1 ? members.get(0).name() + " warzone" : members.get(0).name(); }
+    }
+    private static final int HISTORY = 50;
+    private final Map<String, java.util.Deque<Capture>> history = new HashMap<>();  // war id -> its captures, the latest first
+
     private boolean endOnCapitulation = true;
     private boolean endOnObjective = true;
     private final Map<String, Engagement> heldSince = new HashMap<>();             // war id -> the Engagement the holders below are of
@@ -83,7 +90,7 @@ public final class CaptureEngine {
      * the engagement began (a Raid's defender holding its Fort has won nothing yet). -1 when none has.
      */
     private int objectiveTakenBy(SiteData site, SiteData.War war, WarGraph g, Engagement e) {
-        if (e == null || e.waiting() || e.targets().isEmpty()) return -1;
+        if (e == null || e.waiting() || e.paused() || e.targets().isEmpty()) return -1;
         if (e.kind() != Engagement.Kind.TACTICAL && e.kind() != Engagement.Kind.ASSAULT && e.kind() != Engagement.Kind.RAID) return -1;
         Map<String, Integer> now = new HashMap<>();
         for (String key : e.targets()) {
@@ -158,6 +165,43 @@ public final class CaptureEngine {
         return e;
     }
 
+    /** Pauses the Engagement going on (the Referee): nothing is captured and its time stands still. Null when none is going on, or it already is. */
+    public Engagement pause(SiteData.War war) {
+        Engagement e = engagements.get(war.id());
+        if (e == null || e.waiting() || e.paused()) return null;
+        Engagement p = e.pausedNow(clock(war));
+        engagements.put(war.id(), p);
+        return p;
+    }
+
+    /** Goes on with the paused Engagement; its end moves by the time it stood paused. Null when none is paused. */
+    public Engagement resume(SiteData.War war) {
+        Engagement e = engagements.get(war.id());
+        if (e == null || !e.paused()) return null;
+        Engagement r = e.resumed(clock(war));
+        engagements.put(war.id(), r);
+        return r;
+    }
+
+    /** The captures of this war the plugin made, the latest first (up to 50). */
+    public List<Capture> captures(SiteData.War war) { return List.copyOf(history.getOrDefault(war.id(), new java.util.ArrayDeque<>())); }
+
+    /**
+     * Undoes the latest capture (the Referee, 7.10.6): its localities get back the icons they had just before, and anything under way
+     * there is dropped. Null when there is nothing to undo.
+     */
+    public Capture undo(SiteData.War war) {
+        java.util.Deque<Capture> h = history.get(war.id());
+        Capture c = h == null ? null : h.pollFirst();
+        if (c == null) return null;
+        for (SiteData.City m : c.members()) {
+            markers.write(war, m, c.before().getOrDefault(m.key(), Markers.NONE));
+            forget(war, m);
+            lockedUntil.remove(war.id() + "|" + unitKey(war, m));
+        }
+        return c;
+    }
+
     /** The Engagement waiting for everyone to be ready begins now: captures are allowed and its clock starts. Null when none is waiting. */
     public Engagement begin(SiteData.War war) {
         Engagement e = engagements.get(war.id());
@@ -172,6 +216,7 @@ public final class CaptureEngine {
         if (u == null || u.neutral()) return Blocked.NOT_IN_WAR;
         if (rules.requireEngagement() && e == null) return Blocked.NO_ENGAGEMENT;
         if (e != null && e.waiting()) return Blocked.WAITING;
+        if (e != null && e.paused()) return Blocked.PAUSED;
         if (e != null && u.members.stream().noneMatch(m -> e.covers(m.key()))) return Blocked.NOT_A_TARGET;
         boolean raid = e != null && e.kind() == Engagement.Kind.RAID;   // a Raid's Fort need not be In Play (7.17.13)
         if (rules.inPlay() && g.hasNetwork() && !raid && !u.inPlay) return Blocked.NOT_IN_PLAY;
@@ -185,7 +230,7 @@ public final class CaptureEngine {
         double clock = clocks.merge(war.id(), dt, Double::sum);
         List<Event> events = new ArrayList<>();
         Engagement eng = engagements.get(war.id());
-        if (eng != null && eng.endsAt() <= clock) {
+        if (eng != null && !eng.paused() && eng.endsAt() <= clock) {
             stopEngagement(site, war);
             events.add(new Event(Type.ENGAGEMENT_END, war, null, -1, -1, List.of()));
             eng = null;
@@ -311,7 +356,12 @@ public final class CaptureEngine {
             pr.seconds += dt;
             if (pr.seconds >= rules.secondsFor(u)) {
                 mine.remove(key);
+                Map<String, Integer> iconsBefore = new LinkedHashMap<>();
+                for (SiteData.City c : u.members) iconsBefore.put(c.key(), markers.read(war, c));
                 if (paint(war, u, attacker) > 0) {
+                    java.util.Deque<Capture> h = history.computeIfAbsent(war.id(), k -> new java.util.ArrayDeque<>());
+                    h.addFirst(new Capture(war, List.copyOf(u.members), iconsBefore, attacker, holder));
+                    while (h.size() > HISTORY) h.removeLast();
                     lockedUntil.put(war.id() + "|" + key, clock + rules.cooldownSeconds());
                     if (start != null) events.remove(start);   // taken the moment they arrived (a 0 s locality): just say it was captured
                     events.add(event(Type.CAPTURED, war, u, attacker, holder));
@@ -393,6 +443,7 @@ public final class CaptureEngine {
 
     /** The fronts are reset by hand: every capture under way in this war is dropped (its icons are about to be repainted), and nothing stays locked. */
     public void reset(SiteData.War war) {
+        history.remove(war.id());
         active.remove(war.id());
         lockedUntil.keySet().removeIf(k -> k.startsWith(war.id() + "|"));
     }

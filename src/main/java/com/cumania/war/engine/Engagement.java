@@ -10,9 +10,27 @@ import java.util.Set;
  * restore: for a Raid, the targets' icons when it began, put back when it ends (7.17.13).
  * waiting: opened but not begun, until everyone is ready (the ready check): nothing can be captured and its clock does not run yet.
  * minutes: how long it lasts once it begins (0 = until stopped).
+ * pausedAt: the war's clock when the Referee paused it (NaN = not paused): nothing can be captured and its time stands still.
  */
 public record Engagement(Kind kind, Set<String> targets, double startedAt, double endsAt, Map<String, Integer> restore, String by,
-                         boolean waiting, double minutes) {
+                         boolean waiting, double minutes, double pausedAt) {
+
+    public Engagement(Kind kind, Set<String> targets, double startedAt, double endsAt, Map<String, Integer> restore, String by, boolean waiting, double minutes) {
+        this(kind, targets, startedAt, endsAt, restore, by, waiting, minutes, Double.NaN);
+    }
+
+    public boolean paused() { return !Double.isNaN(pausedAt); }
+
+    /** The same Engagement, paused now. */
+    public Engagement pausedNow(double now) { return new Engagement(kind, targets, startedAt, endsAt, restore, by, waiting, minutes, now); }
+
+    /** The same Engagement, going on again: its end moves by the time it stood paused. */
+    public Engagement resumed(double now) {
+        return new Engagement(kind, targets, startedAt, endsAt + (now - pausedAt), restore, by, waiting, minutes, Double.NaN);
+    }
+
+    /** Seconds left (as of `now`), standing still while paused; infinite when it has no limit. */
+    public double left(double now) { return endsAt - (paused() ? pausedAt : now); }
 
     public enum Kind {
         STRATEGIC("Strategic Campaign", 60), TACTICAL("Tactical Campaign", 40), ASSAULT("Assault", 20), RAID("Raid", 30), FREE("Free fighting", 0);

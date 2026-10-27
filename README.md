@@ -42,6 +42,9 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 | `/bmcwar engagement` | o Engagement em andamento e quanto falta | `bmcwar.use` |
 | `/bmcwar engagement start <strategic\|tactical\|assault\|raid\|free> [war=<id>] [cidades...]` | abre um Engagement (a cidade de uma Warzone traz a Warzone inteira); avisa quando um alvo vai contra o livro (capital num Assault, alvo fora de In Play...) | `bmcwar.admin` |
 | `/bmcwar engagement go [guerra]` | começa agora o Engagement que está esperando todos ficarem ready | `bmcwar.admin` |
+| `/bmcwar engagement pause [guerra]` / `resume [guerra]` | o Referee pausa o Engagement (ninguém captura e o tempo dele para) e depois continua de onde parou | `bmcwar.admin` |
+| `/bmcwar undo [guerra]` | desfaz a última captura (as cidades voltam ao ícone que tinham logo antes); repetir volta mais uma, até 50 desde que o servidor ligou | `bmcwar.admin` |
+| `/bmcwar log [guerra] [linhas]` | as últimas linhas do log da guerra: começo e fim de Engagement, capturas e contestações com quem estava dentro, capitulações, undo, set, reset. O log inteiro fica em `plugins/BmcWar/logs/<guerra>.log` | `bmcwar.admin` |
 | `/bmcwar engagement stop [guerra]` | encerra o Engagement (num Raid, o Fort volta a quem o tinha) | `bmcwar.admin` |
 | `/bmcwar set <cidade> <red\|blue\|green\|contested\|uncontrolled\|clear>` | troca a cor da cidade à mão (some qualquer captura em andamento nela) | `bmcwar.admin` (op) |
 | `/bmcwar reset [guerra] confirm` | volta o front ao início da guerra: toda cidade dos países da guerra fica com a cor do lado do próprio país, e as capturas em andamento somem (sem `confirm` só mostra o que vai fazer) | `bmcwar.admin` |

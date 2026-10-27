@@ -152,6 +152,7 @@ final class ReadyCheck implements Listener {
         plugin.broadcast(war, Component.text(why + ": the " + e.kind().label.toLowerCase(Locale.ROOT) + " begins now"
                 + (e.minutes() > 0 ? " (" + (int) e.minutes() + " min)" : "") + ".", NamedTextColor.GOLD));
         plugin.getLogger().info("[" + key(war) + "] " + e.kind() + " begun (" + why + ")");
+        plugin.log(war, "ENGAGEMENT BEGINS (" + why + ")");
         return true;
     }
 
