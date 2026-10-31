@@ -50,6 +50,26 @@ public record Rules(Map<String, Double> secondsByKind, double defaultSeconds, do
         return max;
     }
 
+    /** Layers of solid blocks thinner than this are a building's roof or floor, not ground. */
+    public static final int GROUND_LAYER = 3;
+
+    /**
+     * How deep underground a player is, from the blocks above their head (solidAbove[0] = the block just above the head, upwards to
+     * the top of the column; true = a solid, opaque block): the solid blocks above them, counting only layers at least
+     * {@link #GROUND_LAYER} blocks thick. A roof, the floors of a tall building or a bridge overhead are thin and count for nothing,
+     * whatever they are made of; the rock over a cave, a mine or a tunnel under a mountain is thick and counts.
+     */
+    public static int groundAbove(boolean[] solidAbove) {
+        int depth = 0, run = 0;
+        for (boolean solid : solidAbove) {
+            if (solid) { run++; continue; }
+            if (run >= GROUND_LAYER) depth += run;
+            run = 0;
+        }
+        if (run >= GROUND_LAYER) depth += run;
+        return depth;
+    }
+
     /** How many blocks below the natural ground a player may be in this city and still count (-1 = any depth). */
     public int maxDepthFor(SiteData.City city) { return depthByCity.getOrDefault(city.key(), maxDepth); }
 

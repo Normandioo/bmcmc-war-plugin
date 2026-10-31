@@ -15,7 +15,6 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.HeightMap;
 import org.bukkit.Material;
-import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -344,29 +343,24 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     // ----- Underground -----
 
-    /** Ground that is not built: stone, dirt, sand, gravel, clay, terracotta, ores... A building's blocks, logs, water and ice are not. */
-    private static boolean naturalGround(Material m) {
-        if (Tag.BASE_STONE_OVERWORLD.isTagged(m) || Tag.DIRT.isTagged(m) || Tag.SAND.isTagged(m) || Tag.TERRACOTTA.isTagged(m)) return true;
-        if (m.name().endsWith("_ORE")) return true;
-        return switch (m) {
-            case GRAVEL, CLAY, SANDSTONE, RED_SANDSTONE, CALCITE, DRIPSTONE_BLOCK, SMOOTH_BASALT, BEDROCK, SUSPICIOUS_GRAVEL, SUSPICIOUS_SAND -> true;
-            default -> false;
-        };
-    }
-
     /**
-     * How many blocks below the natural ground the player is: from the top of their column down, the first block of natural ground
-     * above their feet is the ground; a building's roof and floors are passed over, so someone inside a house, on a tower or in a boat
-     * is at depth 0, someone in a basement a few blocks, someone in a cave or a tunnel under a mountain many.
+     * How deep underground the player is: the solid blocks over their head, counting only layers at least 3 blocks thick
+     * ({@link Rules#groundAbove}). A building's roof and floors are thin, whatever they are made of, so someone inside a house, a hall
+     * or a tower is at depth 0; the rock over a cave, a mine or a tunnel under a mountain is thick.
      */
     static int depthUnderground(Player p) {
         var loc = p.getLocation();
         World w = loc.getWorld();
         if (w == null) return 0;
-        int x = loc.getBlockX(), z = loc.getBlockZ(), feet = loc.getBlockY();
+        int x = loc.getBlockX(), z = loc.getBlockZ(), head = loc.getBlockY() + 1;
         int top = w.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
-        for (int y = top; y > feet; y--) if (naturalGround(w.getBlockAt(x, y, z).getType())) return y - feet;
-        return 0;
+        if (top <= head) return 0;
+        boolean[] above = new boolean[top - head];
+        for (int y = head + 1; y <= top; y++) {
+            Material m = w.getBlockAt(x, y, z).getType();
+            above[y - head - 1] = m.isSolid() && m.isOccluding();
+        }
+        return Rules.groundAbove(above);
     }
 
     /** Once a second: who stands where, and what the clock does about it. */

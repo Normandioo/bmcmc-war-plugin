@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.12.1
+- **Fix: being inside a building no longer counts as underground.** Depth now counts the solid blocks over the player's head only in layers at least 3 blocks thick: a roof and the floors of a building are thin, whatever they are made of (stone, terracotta, sandstone...), so inside a house, a hall or a tower is depth 0. The rock over a cave, a mine or a tunnel still counts. Before, a stone or terracotta roof more than 10 blocks up made the player "underground" and reset the capture.
+- (0.12.0 was withdrawn: its dynmap drawing is not part of the plugin. Use this version.)
+
 ### New in 0.11.0 - the Referee's tools (7.10.4-7.10.6)
 - **`/bmcwar engagement pause` / `resume`**: the Referee stops the engagement for a moment (a crash, a dispute): nothing can be captured and its time stands still; resumed, it goes on with the time it had left. Captures under way when it was paused start over.
 - **`/bmcwar undo [war]`**: undoes the latest capture; its localities get back the icons they had just before. Again goes one further back (up to 50, since the server started). An engagement the capture ended (objective taken, capitulation) is not started again: start a new one.

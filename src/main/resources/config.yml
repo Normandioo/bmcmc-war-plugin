@@ -59,8 +59,9 @@ capture:
   # A city's land is its capture limit (the site's capture.svg), else the province its marker is in.
   # A city with neither gets a round area of this radius (blocks).
   fallback-radius: 40
-  # Players underground do not count, neither as attackers nor as resistance. Depth is measured from the natural ground above
-  # the player (stone, dirt, sand... not buildings): inside a house or on a tower is depth 0, a basement a few blocks, a cave many.
+  # Players underground do not count, neither as attackers nor as resistance. Depth = the solid blocks over the player's head,
+  # counting only layers at least 3 blocks thick: a building's roof and floors are thin, whatever they are made of, so inside a
+  # house, a hall or a tower is depth 0; the rock over a cave, a mine or a tunnel is thick.
   underground:
     # How many blocks below the ground still count in a city (-1 = any depth, the rule is off).
     max-depth: 10

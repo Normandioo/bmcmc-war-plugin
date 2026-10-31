@@ -249,6 +249,15 @@ public class WarCheck {
                 "undo puts back the latest only (Itapecuru), SouthernProvince stays taken");
         check(eng.undo(war) != null && !icons.containsKey(southern.key()) && eng.undo(war) == null, "undo again: SouthernProvince back too; then nothing left to undo");
 
+        // 14. underground: thin layers (a roof, floors) are not ground, whatever they are made of
+        boolean[] house = new boolean[20]; house[4] = true; house[5] = true;                    // a 2-block roof 5 above the head
+        boolean[] tower = new boolean[40]; for (int k = 3; k < 40; k += 5) tower[k] = true;     // the floors of a tall building
+        boolean[] cave = new boolean[30]; java.util.Arrays.fill(cave, 0, 15, true); java.util.Arrays.fill(cave, 18, 30, true); // rock, an air pocket, more rock
+        boolean[] mixed = new boolean[30]; mixed[2] = true; java.util.Arrays.fill(mixed, 6, 9, true);   // a roof under a 3-thick slab
+        check(Rules.groundAbove(house) == 0 && Rules.groundAbove(tower) == 0, "inside a house or a tall building: depth 0");
+        check(Rules.groundAbove(cave) == 27, "in a cave: the rock above counts (" + Rules.groundAbove(cave) + ")");
+        check(Rules.groundAbove(mixed) == 3, "only layers 3 thick or more count (" + Rules.groundAbove(mixed) + ")");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }
