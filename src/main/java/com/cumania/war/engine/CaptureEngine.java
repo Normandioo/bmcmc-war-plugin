@@ -289,15 +289,13 @@ public final class CaptureEngine {
         Map<String, int[]> counts = new LinkedHashMap<>();
         for (Present p : present) {
             if (p.side() < 0 || p.side() >= sides) continue;
-            for (SiteData.City city : site.cities()) {
-                if (!city.area().contains(p.x(), p.z())) continue;
-                if (rules.tooDeep(city, p.depth())) break;   // too far underground for this city: neither attacker nor resistance
-                if (outOfHeight(city, p.y())) break;          // below the city's ground or far above it (7.8.4): neither either
-                WarGraph.Unit u = g.unitOf(city);
-                if (blocked(g, u, eng) != null) break;       // outside the war, not In Play, or not fought over now
-                counts.computeIfAbsent(u.key(), k -> new int[sides])[p.side()]++;
-                break;   // a place is in one city's land
-            }
+            SiteData.City city = site.cityAt(p.x(), p.z());   // a place is in one city's land
+            if (city == null) continue;
+            if (rules.tooDeep(city, p.depth())) continue;    // too far underground for this city: neither attacker nor resistance
+            if (outOfHeight(city, p.y())) continue;           // below the city's ground or far above it (7.8.4): neither either
+            WarGraph.Unit u = g.unitOf(city);
+            if (blocked(g, u, eng) != null) continue;        // outside the war, not In Play, or not fought over now
+            counts.computeIfAbsent(u.key(), k -> new int[sides])[p.side()]++;
         }
         Map<String, Progress> mine = active.computeIfAbsent(war.id(), k -> new HashMap<>());
         List<String> keys = new ArrayList<>(counts.keySet());

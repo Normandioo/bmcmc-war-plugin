@@ -147,6 +147,20 @@ public class EngineCheck {
         check(zoned.cities().stream().filter(c -> c.limit() == SiteData.Limit.PROVINCE).count() == own - 1, "every other city keeps its province");
         check(site.cities().stream().noneMatch(c -> c.limit() == SiteData.Limit.ZONE), "without zones in the file nothing changes");
 
+        // 11b. a city with no limit of its own reaches its whole province, but a drawn limit inside it wins; a bridge is not a city
+        var locs = json.getAsJsonArray("localities");
+        for (String[] extra : new String[][]{{"ExtraTown", "Small"}, {"ExtraBridge", "BridgeOpenRed"}}) {
+            var l = new com.google.gson.JsonObject();
+            l.addProperty("name", extra[0]); l.addProperty("country", small.country()); l.addProperty("kind", extra[1]);
+            l.addProperty("x", small.x() + 1); l.addProperty("z", small.z() + 1); locs.add(l);
+        }
+        SiteData both2 = SiteData.parse(json.toString(), 40);
+        SiteData.City extra = both2.cities().stream().filter(c -> c.name().equals("ExtraTown")).findFirst().orElse(null);
+        SiteData.City here = both2.cityAt(small.x(), small.z());
+        check(extra != null && extra.area().contains(small.x(), small.z()) && here != null && here.key().equals(small.key()),
+                "inside a drawn limit the lookup finds that city, not one whose province covers it (" + (here == null ? "none" : here.name()) + ")");
+        check(both2.cities().stream().noneMatch(c -> c.name().equals("ExtraBridge")), "a Bridge marker exported as a locality is not a city");
+
         // 12. a war colour stuck on the type in the site's data ("SmallRed", "LargeCapitalRed") does not change the type
         check("Small".equals(SiteData.plainKind("SmallRed")) && "LargeCapital".equals(SiteData.plainKind("LargeCapitalRed"))
                 && "Fort".equals(SiteData.plainKind("FortBlue")) && "Locality".equals(SiteData.plainKind("Locality")), "colour suffixes are taken off the type");

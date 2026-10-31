@@ -141,8 +141,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                 + (tag != null ? " (from your tag)" : " (from the site's population lists)")), NamedTextColor.GRAY);
         String counts = plugin.countsLine(p);
         say(sender, counts, counts.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
-        for (SiteData.City city : site.cities()) {
-            if (!city.area().contains(loc.getX(), loc.getZ())) continue;
+        SiteData.City city = site.cityAt(loc.getX(), loc.getZ());
+        if (city != null) {
             say(sender, "You are in " + city.name() + " (" + city.country() + "), a " + city.kind() + (switch (city.limit()) {
                 case ZONE -> " (inside its capture limit)";
                 case PROVINCE -> "";

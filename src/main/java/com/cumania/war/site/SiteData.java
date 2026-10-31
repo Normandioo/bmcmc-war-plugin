@@ -137,6 +137,21 @@ public final class SiteData {
     }
 
     public List<City> cities() { return cities; }
+
+    /**
+     * The city whose land this spot is on, or null. A capture limit drawn for a city wins over a province or a round area that only
+     * stands in for one (a city with no limit of its own reaches as far as its whole province, which can hold other cities' limits).
+     */
+    public City cityAt(double x, double z) {
+        City province = null, circle = null;
+        for (City c : cities) {
+            if (!c.area().contains(x, z)) continue;
+            if (c.limit() == Limit.ZONE) return c;
+            if (c.limit() == Limit.PROVINCE) { if (province == null) province = c; }
+            else if (circle == null) circle = c;
+        }
+        return province != null ? province : circle;
+    }
     public List<War> wars() { return wars; }
     public String generated() { return generated; }
 
@@ -166,6 +181,7 @@ public final class SiteData {
         if (file.localities != null) for (TerritoryFile.Locality l : file.localities) {
             String k = key(l.name, l.country);
             String kind = plainKind(l.kind);
+            if (kind != null && (kind.startsWith("Bridge") || kind.startsWith("Strait"))) continue;   // a Bridge or Strait is a Connection, not a locality
             List<String> des = l.designations == null ? List.of() : List.copyOf(l.designations);
             Polygon zone = zones.get(k);
             if (zone != null) { cities.add(new City(k, l.name, l.country, kind, l.x, l.z, zone, Limit.ZONE, des)); continue; }

@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.13.1
+- **Fix: standing inside a city's capture limit, the plugin said you were in another place.** A locality with no capture limit of its own reaches over its whole province, and the plugin took the first one it found. Now a city's own drawn limit always wins over a province or a round area. Seen in Cumania IV: inside Peshbron the plugin said "Unnamed3".
+- Bridges and Straits in the site's data (`BridgeOpenRed`, `StraitClosed`...) are never cities. (The site also stopped exporting them as localities.)
+
 ### New in 0.13.0
 - **Each city has a range of heights that count (7.8.4), instead of the underground depth.** A player below it (hiding underground) or above it (a skybridge) counts neither as attacker nor as resistance. It is worked out from each city's terrain: from the lowest ground on its land minus `capture.height.below-ground` (10) up to its highest building plus `capture.height.above-buildings` (30). Set a city by hand in `capture.height.cities` (`Name(Country): {min: 40, max: 160}`) for tunnels, bunkers or tall towers. `/bmcwar where` shows the city's range and your Y; `/bmcwar debug` says when you are outside it.
 - **Delete `plugins/BmcWar/config.yml`** (or replace its `capture.underground` section by the new `capture.height`): `capture.underground` is no longer used.

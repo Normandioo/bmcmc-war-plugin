@@ -358,8 +358,7 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     /** The city whose land the player stands on, or null. */
     static SiteData.City cityAt(SiteData s, double x, double z) {
-        for (SiteData.City c : s.cities()) if (c.area().contains(x, z)) return c;
-        return null;
+        return s.cityAt(x, z);
     }
 
     /**
@@ -437,8 +436,8 @@ public final class BmcWarPlugin extends JavaPlugin {
     }
 
     private void actionBar(CaptureEngine engine, SiteData s, SiteData.War war, CaptureEngine.Present at, Player player) {
-        for (SiteData.City city : s.cities()) {
-            if (!city.area().contains(at.x(), at.z())) continue;
+        SiteData.City city = s.cityAt(at.x(), at.z());
+        if (city != null) {
             var st = engine.statusOf(war, city);
             if (st == null) return;
             String name = st.size() > 1 ? st.city().name() + " warzone" : city.name();
