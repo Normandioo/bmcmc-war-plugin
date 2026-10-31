@@ -56,8 +56,6 @@ public final class TerritoryFile {
         public Map<String, List<String>> supplyCapitals;
         /** Bridges or Straits opened or closed in this war (7.7.10-14): "Name(Country)" -> "open" / "closed". */
         public Map<String, String> bridges;
-        /** Each nation's land on the war's Strategic Map, in blocks (an event map with no territories on dynmap). */
-        public List<Zone> territories;
     }
 
     /** The Connections between localities, Warzones, Bridges and Straits, as the site reads them from its map (js/network.js). */

@@ -68,9 +68,6 @@ public final class DynmapMarkers implements Markers {
         }
     }
 
-    /** Whether this city has a marker in this world's dynmap (as of the last rebuild). */
-    public boolean has(SiteData.City city) { return byCity.containsKey(city.key()); }
-
     private static String clean(String raw) { return raw == null ? "" : raw.replaceAll("<[^>]*>", "").replaceAll("§.", "").trim(); }
 
     private static String iconId(Marker m) { MarkerIcon icon = m.getMarkerIcon(); return icon == null ? "" : icon.getMarkerIconID(); }

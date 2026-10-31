@@ -1,6 +1,5 @@
 package com.cumania.war;
 
-import com.cumania.war.dynmap.DynmapLayers;
 import com.cumania.war.dynmap.DynmapMarkers;
 import com.cumania.war.engine.CaptureEngine;
 import com.cumania.war.engine.MemoryMarkers;
@@ -105,12 +104,12 @@ public final class BmcWarPlugin extends JavaPlugin {
                 String world = m.getString("world", name);
                 String url = m.getString("site");
                 if (url == null || url.isBlank()) { getLogger().warning("maps." + name + " has no \"site\" (its territories.json): left out."); continue; }
-                maps.add(new WarMap(name, world, url, m.getString("dynmap-world", world), m.getStringList("wars"), folder.resolve("territories-cache-" + name + ".json"), m.getBoolean("dynmap-layers", false)));
+                maps.add(new WarMap(name, world, url, m.getString("dynmap-world", world), m.getStringList("wars"), folder.resolve("territories-cache-" + name + ".json")));
             }
         }
         if (maps.isEmpty()) {
             maps.add(new WarMap("main", c.getString("world", "world"), c.getString("site.url", "https://bmcmc.online/gaia/territories.json"),
-                    c.getString("dynmap.world", "world"), c.getStringList("wars"), folder.resolve("territories-cache.json"), false));
+                    c.getString("dynmap.world", "world"), c.getStringList("wars"), folder.resolve("territories-cache.json")));
         }
         var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
         if (!(plugin instanceof org.dynmap.DynmapAPI)) getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
@@ -118,7 +117,6 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (plugin instanceof org.dynmap.DynmapAPI api) {
                 m.dynmap = new DynmapMarkers(api, m.dynmapWorld, w -> getLogger().warning("[" + m.name + "] " + w));
                 m.markers = m.dynmap;
-                if (m.drawLayers) m.layers = new DynmapLayers(api, m.dynmapWorld, w -> getLogger().warning("[" + m.name + "] " + w));
             } else {
                 m.dynmap = null;
                 m.markers = new MemoryMarkers();
@@ -129,7 +127,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
                 try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
             }
-            m.rebuildMarkers(handledWars(m));
+            m.rebuildMarkers();
             if (Bukkit.getWorld(m.world) == null) getLogger().warning("[" + m.name + "] There is no world called \"" + m.world + "\" on the server (yet): nobody can capture there until it exists.");
         }
         getLogger().info("War maps: " + String.join(", ", maps.stream().map(m -> m.name + " (world " + m.world + ")").toList()));
@@ -206,7 +204,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (parsed.network() == null && getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
                 getLogger().warning("[" + m.name + "] The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
             m.site = parsed;
-            Bukkit.getScheduler().runTask(this, () -> m.rebuildMarkers(handledWars(m)));
+            Bukkit.getScheduler().runTask(this, m::rebuildMarkers);
         } catch (Exception e) {
             getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);
         }
@@ -381,9 +379,8 @@ public final class BmcWarPlugin extends JavaPlugin {
         for (WarMap map : maps) {
             SiteData s = map.site;
             if (s == null || map.engine == null) continue;
-            if (rebuild) map.rebuildMarkers(handledWars(map));   // markers are edited by hand: look them up again every minute
+            if (rebuild) map.rebuildMarkers();   // markers are edited by hand: look them up again every minute
             tick(map, s, dt);
-            if (map.layers != null) for (SiteData.War war : handledWars(map)) map.layers.refresh(s, war, map.markers);   // the limits' colours follow who holds each city
         }
         if (table != null) table.tick();
         for (Player p : Bukkit.getOnlinePlayers()) {

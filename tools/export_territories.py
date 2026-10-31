@@ -361,12 +361,7 @@ def as_list(value):
 
 
 def load_json(path):
-    if not path.exists(): return {}
-    text = path.read_text(encoding='utf8')
-    try:
-        return json.loads(text)
-    except ValueError:   # the site's own reader forgives a trailing comma ("live": true,}), so the files may have one
-        return json.loads(re.sub(r',(\s*[}\]])', r'\1', text))
+    return json.loads(path.read_text(encoding='utf8')) if path.exists() else {}
 
 
 def plain(name):
@@ -572,64 +567,10 @@ def iso_z(dt):
     return dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
 
 
-def war_map_fills(path):
-    """{nation: fill colour} of the shapes in a war's Strategic Map (a shape's id or class is the nation)."""
-    try:
-        tree = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
-        return {}
-    out = {}
-    for el, tx, ty in walk(tree, 0.0, 0.0):
-        fill = style_fill(el.get('style')) or el.get('fill')
-        name = next((c for c in (el.get('class') or '').split() if c != 'territory'), None) or el.get('id')
-        if fill and name and name not in out: out[name] = fill.lower()
-    return out
-
-
-def war_map_areas(path, to_block, nations):
-    """The land of each nation of a war on its Strategic Map: the shapes whose id (or class) is one of `nations`, in blocks,
-    [{country, rings}]. The BmcWar plugin draws them on dynmap for a map that has no territories of its own there."""
-    try:
-        tree = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
-        return []
-    out = {}
-    for el, tx, ty in walk(tree, 0.0, 0.0):
-        name = el.get('id') if el.get('id') in nations else next((c for c in (el.get('class') or '').split() if c in nations), None)
-        if not name: continue
-        try: rings = parse_path(el.get('d', ''))
-        except ValueError: continue
-        for ring in rings:
-            pts = [to_block(px + tx, py + ty) for px, py in ring]
-            if len(pts) > 1 and pts[0] == pts[-1]: pts.pop()
-            if len(pts) >= 3: out.setdefault(name, []).append([v for p in pts for v in p])
-    return [{'country': k, 'rings': v} for k, v in out.items()]
-
-
-def war_map_states(path):
-    """[(name, country, state)] from a war's Strategic Map: state is 0/1/2 for Red/Blue/Green, or 'contested' / 'uncontrolled'.
-    Bridges and Straits are not localities and are skipped."""
-    try:
-        tree = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as e:
-        print(f'  war map: {path} cannot be read ({e}); the war starts with no cities taken')
-        return []
-    out = []
-    for el, tx, ty in walk(tree, 0.0, 0.0, ('ellipse',)):
-        m = re.fullmatch(r'marker__(.+?)-lp-(.+?)-rp-__(.+)', el.get('id') or '')
-        if not m or re.fullmatch(r'(Bridge|Strait)(Open|Closed)?', m.group(3)): continue
-        c = re.search(r'(Red|Blue|Green|Contested|Neutral)$', m.group(3))
-        word = c.group(1) if c else ''
-        state = {'Red': 0, 'Blue': 1, 'Green': 2, 'Contested': 'contested'}.get(word, 'uncontrolled')
-        out.append((m.group(1), m.group(2), state))
-    return out
-
-
-def war_block(meta, diplomacy, countries, localities, clock, root=None):
+def war_block(meta, diplomacy, countries, localities, clock):
     """The "war" part of territories.json. Everything is stored with absolute times, so the mod works out what is still running."""
     confed = diplomacy.get('confederations') or {}
     keys = {plain(k).lower(): k for k in countries}
-    for l in localities: keys.setdefault(plain(l['country']).lower(), l['country'])   # a nation with cities but no land on the political map (an event's Agartha / Recallia)
     strip = lambda n: str(n).lstrip('@')
 
     def resolve(name):
@@ -691,27 +632,11 @@ def war_block(meta, diplomacy, countries, localities, clock, root=None):
             if word in ('contested', 'uncontrolled'): entry['state'] = word
             else: entry['state'] = 'held'; entry['holder'] = shown(by); entry['holderKey'] = resolve(by) or strip(by)
             captured.append(entry)
-        # A war with a Strategic Map (its "map" SVG, js/warmap.js): who holds each city is what its markers say - Red = the first side,
-        # Blue = the second, Green = a third, "Contested", or no colour = Uncontrolled. Anything set in "captured" wins over the map.
-        if war.get('map') and root is not None:
-            have = {(c['name'], c['country']) for c in captured}
-            for name, country, state in war_map_states(Path(root) / str(war['map'])):
-                loc = loc_by_id.get(f'{name}({country})')
-                if not loc or (loc['name'], loc['country']) in have: continue
-                entry = {'name': loc['name'], 'country': loc['country'], 'x': loc['x'], 'z': loc['z']}
-                if state in ('contested', 'uncontrolled'): entry['state'] = state
-                elif state < len(sides):
-                    side_keys = [k for m in sides[state]['members'] for k in m.get('countries', [])]
-                    if not side_keys: continue
-                    by = loc['country'] if loc['country'] in side_keys else side_keys[0]   # held by the city's own nation when it is on that side
-                    entry['state'] = 'held'; entry['holder'] = shown(by); entry['holderKey'] = resolve(by) or strip(by)
-                else: continue
-                captured.append(entry)
         out = {'id': wid, 'name': war.get('displayName') or re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', wid), 'type': label, 'rule': rule,
                'started': iso_z(when(war.get('started'), clock)), 'ended': iso_z(when(war.get('ended'), clock)),
                'sides': sides, 'captured': captured}
         if war.get('noAllies'): out['noAllies'] = True
-        if war.get('live'): out['live'] = True   # the site reads who holds its cities from dynmap (js/warlive.js, over its Strategic Map's markers); the mod does the same
+        if war.get('live') and not war.get('map'): out['live'] = True   # the site reads who holds its cities from dynmap (js/warlive.js); the mod does the same
         theater = [t for t in as_list(war.get('theater')) if t.strip()]
         if theater: out['theater'] = ', '.join(theater)
         if war.get('notes'): out['notes'] = str(war['notes'])
@@ -828,7 +753,7 @@ def main():
         countries[name] = {
             'name': info.get('officialName') or name,
             'color': fills[name].most_common(1)[0][0] if fills[name] else '#888888',
-            **country_extras(name, meta, diplomacy, Path(cfg['latestFile']).parent.name),
+            **country_extras(name, meta, diplomacy, args.world),
         }
 
     # Localities: positions come from the SVG's markers, details from localities.json
@@ -880,25 +805,8 @@ def main():
     cliques = load_json(root / cfg['cliquesFile']) if cfg.get('cliquesFile') else {}
     players = player_extras(people, players_file, folder, meta, diplomacy, cliques, args.refresh_skins)
 
-    # Nations with cities but no land on the political map (an event's Agartha and Recallia): they still get their entry (flag, official name, colour
-    # from the war's own map), so the mod can name and colour the sides of the war
-    war_fills = {}
-    for w in (diplomacy.get('wars') or {}).values():
-        if w.get('map'): war_fills.update(war_map_fills(root / str(w['map'])))
-    for name in sorted({l['country'] for l in localities} - set(countries)):
-        info = meta.get(name, {})
-        countries[name] = {'name': info.get('officialName') or name, 'color': war_fills.get(name, '#888888'),
-                           **country_extras(name, meta, diplomacy, Path(cfg['latestFile']).parent.name)}
-
     clock = cfg.get('clock')
-    war = war_block(meta, diplomacy, countries, localities, clock, root)
-    # Each nation's land on its war's Strategic Map, for the BmcWar plugin to draw on dynmap (an event map with no territories there)
-    by_id = {w['id']: w for w in war['wars']}
-    for wid, w in (diplomacy.get('wars') or {}).items():
-        if not w.get('map') or wid not in by_id: continue
-        nations = {k for sd in by_id[wid]['sides'] for m in sd['members'] for k in m.get('countries', [])}
-        areas = war_map_areas(root / str(w['map']), to_block, nations)
-        if areas: by_id[wid]['territories'] = areas
+    war = war_block(meta, diplomacy, countries, localities, clock)
 
     out = {
         'format': 1, 'world': args.world, 'dimension': args.dimension,
