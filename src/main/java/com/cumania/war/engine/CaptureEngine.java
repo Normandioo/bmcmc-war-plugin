@@ -21,7 +21,9 @@ import java.util.Set;
  */
 public final class CaptureEngine {
     /** depth = blocks below the natural ground (0 on the surface, in a building or under water). */
-    public record Present(String player, int side, double x, double z, int depth) {
+    /** y = the block height of the player's feet (Integer.MIN_VALUE = unknown: every height counts). */
+    public record Present(String player, int side, double x, double z, int depth, int y) {
+        public Present(String player, int side, double x, double z, int depth) { this(player, side, x, z, depth, Integer.MIN_VALUE); }
         public Present(String player, int side, double x, double z) { this(player, side, x, z, 0); }
     }
 
@@ -72,12 +74,28 @@ public final class CaptureEngine {
     private static final int HISTORY = 50;
     private final Map<String, java.util.Deque<Capture>> history = new HashMap<>();  // war id -> its captures, the latest first
 
+    private final Map<String, int[]> heights = new HashMap<>();   // city key -> {lowest Y, highest Y} that counts there (7.8.4)
     private boolean endOnCapitulation = true;
     private boolean endOnObjective = true;
     private final Map<String, Engagement> heldSince = new HashMap<>();             // war id -> the Engagement the holders below are of
     private final Map<String, Map<String, Integer>> heldAtStart = new HashMap<>(); // war id -> target key -> who held it when it began
 
     public CaptureEngine(Rules rules, Markers markers) { this.rules = rules; this.markers = markers; }
+
+    /** The heights that count in this city: from Y min to Y max (7.8.4: not deep underground, not far above the ground). */
+    public void setHeightRange(String cityKey, int min, int max) { heights.put(cityKey, new int[]{min, max}); }
+
+    /** {min, max} for the city, or null when not worked out yet (then every height counts). */
+    public int[] heightRange(String cityKey) { return heights.get(cityKey); }
+
+    /** Forgets the heights (the site's data or the config changed). */
+    public void clearHeightRanges() { heights.clear(); }
+
+    /** True when a player at this height does not count in this city. */
+    public boolean outOfHeight(SiteData.City city, int y) {
+        int[] r = heights.get(city.key());
+        return r != null && y != Integer.MIN_VALUE && (y < r[0] || y > r[1]);
+    }
 
     /** Whether the engagement going on ends when a nation of the war Capitulates (default true). */
     public CaptureEngine endOnCapitulation(boolean on) { endOnCapitulation = on; return this; }
@@ -274,6 +292,7 @@ public final class CaptureEngine {
             for (SiteData.City city : site.cities()) {
                 if (!city.area().contains(p.x(), p.z())) continue;
                 if (rules.tooDeep(city, p.depth())) break;   // too far underground for this city: neither attacker nor resistance
+                if (outOfHeight(city, p.y())) break;          // below the city's ground or far above it (7.8.4): neither either
                 WarGraph.Unit u = g.unitOf(city);
                 if (blocked(g, u, eng) != null) break;       // outside the war, not In Play, or not fought over now
                 counts.computeIfAbsent(u.key(), k -> new int[sides])[p.side()]++;

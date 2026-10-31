@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.13.0
+- **Each city has a range of heights that count (7.8.4), instead of the underground depth.** A player below it (hiding underground) or above it (a skybridge) counts neither as attacker nor as resistance. It is worked out from each city's terrain: from the lowest ground on its land minus `capture.height.below-ground` (10) up to its highest building plus `capture.height.above-buildings` (30). Set a city by hand in `capture.height.cities` (`Name(Country): {min: 40, max: 160}`) for tunnels, bunkers or tall towers. `/bmcwar where` shows the city's range and your Y; `/bmcwar debug` says when you are outside it.
+- **Delete `plugins/BmcWar/config.yml`** (or replace its `capture.underground` section by the new `capture.height`): `capture.underground` is no longer used.
+
 ### New in 0.12.1
 - **Fix: being inside a building no longer counts as underground.** Depth now counts the solid blocks over the player's head only in layers at least 3 blocks thick: a roof and the floors of a building are thin, whatever they are made of (stone, terracotta, sandstone...), so inside a house, a hall or a tower is depth 0. The rock over a cave, a mine or a tunnel still counts. Before, a stone or terracotta roof more than 10 blocks up made the player "underground" and reset the capture.
 - (0.12.0 was withdrawn: its dynmap drawing is not part of the plugin. Use this version.)

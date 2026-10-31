@@ -59,16 +59,14 @@ capture:
   # A city's land is its capture limit (the site's capture.svg), else the province its marker is in.
   # A city with neither gets a round area of this radius (blocks).
   fallback-radius: 40
-  # Players underground do not count, neither as attackers nor as resistance. Depth = the solid blocks over the player's head,
-  # counting only layers at least 3 blocks thick: a building's roof and floors are thin, whatever they are made of, so inside a
-  # house, a hall or a tower is depth 0; the rock over a cave, a mine or a tunnel is thick.
-  underground:
-    # How many blocks below the ground still count in a city (-1 = any depth, the rule is off).
-    max-depth: 10
-    # Cities with tunnels or bunkers that are part of them, as Name(Country) like on the site: how deep still counts there.
-    # Example:
-    #   Tsarigrad(Versk): 40
-    #   Itapecuru(Lombriga): -1
+  # The heights that count in each city (7.8.4: not deep underground, not far above the ground): a player outside them counts
+  # neither as attacker nor as resistance. Worked out from each city's terrain: from its lowest ground minus below-ground, up to its
+  # highest building plus above-buildings. /bmcwar where shows them; F3 shows your Y.
+  height:
+    below-ground: 10
+    above-buildings: 30
+    # Cities set by hand, as Name(Country) like on the site (tunnels or bunkers that are part of the city, a tall tower...). Example:
+    #   Siesta(Diarchy): {min: 40, max: 160}
     cities: {}
 
 players:

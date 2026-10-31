@@ -249,14 +249,17 @@ public class WarCheck {
                 "undo puts back the latest only (Itapecuru), SouthernProvince stays taken");
         check(eng.undo(war) != null && !icons.containsKey(southern.key()) && eng.undo(war) == null, "undo again: SouthernProvince back too; then nothing left to undo");
 
-        // 14. underground: thin layers (a roof, floors) are not ground, whatever they are made of
-        boolean[] house = new boolean[20]; house[4] = true; house[5] = true;                    // a 2-block roof 5 above the head
-        boolean[] tower = new boolean[40]; for (int k = 3; k < 40; k += 5) tower[k] = true;     // the floors of a tall building
-        boolean[] cave = new boolean[30]; java.util.Arrays.fill(cave, 0, 15, true); java.util.Arrays.fill(cave, 18, 30, true); // rock, an air pocket, more rock
-        boolean[] mixed = new boolean[30]; mixed[2] = true; java.util.Arrays.fill(mixed, 6, 9, true);   // a roof under a 3-thick slab
-        check(Rules.groundAbove(house) == 0 && Rules.groundAbove(tower) == 0, "inside a house or a tall building: depth 0");
-        check(Rules.groundAbove(cave) == 27, "in a cave: the rock above counts (" + Rules.groundAbove(cave) + ")");
-        check(Rules.groundAbove(mixed) == 3, "only layers 3 thick or more count (" + Rules.groundAbove(mixed) + ")");
+        // 14. the heights that count in a city (7.8.4): below its ground or far above it, a player is neither attacker nor resistance
+        icons.clear();
+        eng = new CaptureEngine(rules(false, false), MARKERS);
+        eng.setHeightRange(cubatao.key(), 55, 120);
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("deep", 0, cubatao.x(), cubatao.z(), 0, 40)), 2);
+        check(ev.isEmpty() && !icons.containsKey(cubatao.key()), "at Y 40, under Cubatao's ground (from Y 55): nothing is captured");
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("sky", 0, cubatao.x(), cubatao.z(), 0, 200)), 2);
+        check(ev.isEmpty(), "at Y 200, far above it (up to Y 120): nothing either");
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("ok", 0, cubatao.x(), cubatao.z(), 0, 70)), 1);
+        check(captured(ev, cubatao), "at Y 70 it is taken");
+        check(!eng.outOfHeight(itapecuru, 5), "a city with no range worked out yet: every height counts");
 
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);

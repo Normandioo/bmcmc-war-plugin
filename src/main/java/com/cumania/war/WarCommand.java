@@ -141,7 +141,6 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                 + (tag != null ? " (from your tag)" : " (from the site's population lists)")), NamedTextColor.GRAY);
         String counts = plugin.countsLine(p);
         say(sender, counts, counts.startsWith("You count") ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
-        int depth = BmcWarPlugin.depthUnderground(p);
         for (SiteData.City city : site.cities()) {
             if (!city.area().contains(loc.getX(), loc.getZ())) continue;
             say(sender, "You are in " + city.name() + " (" + city.country() + "), a " + city.kind() + (switch (city.limit()) {
@@ -149,10 +148,11 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                 case PROVINCE -> "";
                 case CIRCLE -> " (no outline on the site: a round area is used)";
             }) + ".", NamedTextColor.WHITE);
-            var rules = plugin.rules();
-            int max = rules.maxDepthFor(city);
-            if (depth > 0) say(sender, "  You are " + depth + " blocks underground; here up to " + (max < 0 ? "any depth" : max + " blocks") + " counts"
-                    + (rules.tooDeep(city, depth) ? ", so you do NOT count." : "."), rules.tooDeep(city, depth) ? NamedTextColor.YELLOW : NamedTextColor.GRAY);
+            plugin.ensureHeight(map, city, p.getWorld());
+            int[] range = map.engine.heightRange(city.key());
+            int y = loc.getBlockY();
+            if (range != null) say(sender, "  Here counts from Y " + range[0] + " to Y " + range[1] + "; you are at Y " + y
+                    + (map.engine.outOfHeight(city, y) ? ", so you do NOT count." : "."), map.engine.outOfHeight(city, y) ? NamedTextColor.YELLOW : NamedTextColor.GRAY);
             for (SiteData.War war : plugin.handledWars(map)) {
                 WarGraph g = map.engine.graph(site, war);
                 WarGraph.Unit u = g.unitOf(city);

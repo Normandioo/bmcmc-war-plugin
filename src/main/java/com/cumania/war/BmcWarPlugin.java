@@ -14,7 +14,6 @@ import org.bukkit.Bukkit;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.HeightMap;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -89,7 +88,7 @@ public final class BmcWarPlugin extends JavaPlugin {
         Rules rules = new Rules(seconds, 0, c.getDouble("capture.capital-multiplier", 1),
                 !"pause".equalsIgnoreCase(c.getString("capture.on-resistance", "reset")), Math.max(0, c.getDouble("capture.grace-seconds", 0)),
                 Math.max(0, c.getDouble("capture.cooldown-seconds", 0)), Math.max(1, c.getInt("capture.min-attackers", 1)),
-                c.getInt("capture.underground.max-depth", 10), depthByCity(c.getConfigurationSection("capture.underground.cities")),
+                -1, Map.of(),   // the old underground depth: replaced by the heights that count in each city (capture.height)
                 c.getBoolean("rules.in-play", true), c.getBoolean("rules.encirclement", true), c.getBoolean("rules.require-engagement", true));
         // the maps: the old single-map keys (site.url, world, dynmap.world, wars) still work when there is no "maps" section
         List<WarMap> old2 = new ArrayList<>(maps);
@@ -110,6 +109,17 @@ public final class BmcWarPlugin extends JavaPlugin {
             maps.add(new WarMap("main", c.getString("world", "world"), c.getString("site.url", "https://bmcmc.online/gaia/territories.json"),
                     c.getString("dynmap.world", "world"), c.getStringList("wars"), folder.resolve("territories-cache.json")));
         }
+        heightBelow = Math.max(0, c.getInt("capture.height.below-ground", 10));
+        heightAbove = Math.max(0, c.getInt("capture.height.above-buildings", 30));
+        heightByCity.clear();
+        ConfigurationSection hc = c.getConfigurationSection("capture.height.cities");
+        if (hc != null) for (String k : hc.getKeys(false)) {
+            ConfigurationSection one = hc.getConfigurationSection(k);
+            if (one == null || !one.contains("min") || !one.contains("max")) { getLogger().warning("capture.height.cities." + k + " needs min and max (e.g. {min: 55, max: 140}): ignored."); continue; }
+            heightByCity.put(k.replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT), new int[]{one.getInt("min"), one.getInt("max")});
+        }
+        if (c.isConfigurationSection("capture.underground")) getLogger().warning("capture.underground is no longer used: what counts is now the height in each city (capture.height). Delete plugins/BmcWar/config.yml to get the new section.");
+        heightDone.clear();
         var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
         if (!(plugin instanceof org.dynmap.DynmapAPI)) getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
         for (WarMap m : maps) {
@@ -178,12 +188,6 @@ public final class BmcWarPlugin extends JavaPlugin {
         return out;
     }
 
-    /** capture.underground.cities: "Name(Country)": depth -> keyed like a city ("name(country)" in lower case). */
-    private static Map<String, Integer> depthByCity(ConfigurationSection section) {
-        Map<String, Integer> out = new HashMap<>();
-        if (section != null) for (String k : section.getKeys(false)) out.put(k.replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT), section.getInt(k));
-        return out;
-    }
 
     private int fallbackRadius() { return getConfig().getInt("capture.fallback-radius", 40); }
 
@@ -203,7 +207,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (parsed.network() == null && getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
                 getLogger().warning("[" + m.name + "] The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
             m.site = parsed;
-            Bukkit.getScheduler().runTask(this, m::rebuildMarkers);
+            Bukkit.getScheduler().runTask(this, () -> { forgetHeights(m); m.rebuildMarkers(); });
         } catch (Exception e) {
             getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);
         }
@@ -268,11 +272,12 @@ public final class BmcWarPlugin extends JavaPlugin {
             List<SiteData.War> wars = handledWars(map);
             if (!wars.isEmpty() && wars.stream().allMatch(w -> sideOf(p, s, w) < 0)) why = "no side in the war (tag: " + (countryFromTag(p, s) == null ? "none" : countryFromTag(p, s)) + ")";
             if (why == null) {
-                int depth = depthUnderground(p);
-                for (SiteData.City c : s.cities()) {
-                    if (!c.area().contains(p.getLocation().getX(), p.getLocation().getZ())) continue;
-                    if (engine.rules().tooDeep(c, depth)) why = depth + " blocks underground (limit " + engine.rules().maxDepthFor(c) + " here)";
-                    break;
+                SiteData.City c = cityAt(s, p.getLocation().getX(), p.getLocation().getZ());
+                if (c != null) {
+                    ensureHeight(map, c, p.getWorld());
+                    int[] r = engine.heightRange(c.key());
+                    if (r != null && engine.outOfHeight(c, p.getLocation().getBlockY()))
+                        why = "at Y " + p.getLocation().getBlockY() + ", outside " + c.name() + "'s heights (Y " + r[0] + " to " + r[1] + ")";
                 }
             }
         }
@@ -343,24 +348,49 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     // ----- Underground -----
 
+    // ----- The heights that count in each city (7.8.4: not deep underground, not far above the ground) -----
+
+    private int heightBelow = 10, heightAbove = 30;
+    /** capture.height.cities: city key -> {min, max} set by hand. */
+    private final Map<String, int[]> heightByCity = new HashMap<>();
+    /** Cities whose range was worked out over all of their land ("map|key"): not looked at again until the data or config changes. */
+    private final java.util.Set<String> heightDone = new java.util.HashSet<>();
+
+    /** The city whose land the player stands on, or null. */
+    static SiteData.City cityAt(SiteData s, double x, double z) {
+        for (SiteData.City c : s.cities()) if (c.area().contains(x, z)) return c;
+        return null;
+    }
+
     /**
-     * How deep underground the player is: the solid blocks over their head, counting only layers at least 3 blocks thick
-     * ({@link Rules#groundAbove}). A building's roof and floors are thin, whatever they are made of, so someone inside a house, a hall
-     * or a tower is at depth 0; the rock over a cave, a mine or a tunnel under a mountain is thick.
+     * Makes sure the engine knows the heights that count in this city: set by hand in capture.height.cities, or else from its terrain,
+     * from the lowest ground on its land minus capture.height.below-ground up to its highest building plus capture.height.above-buildings.
+     * Only loaded chunks are looked at; until all of the city's land has been seen, the range is worked out again next time.
      */
-    static int depthUnderground(Player p) {
-        var loc = p.getLocation();
-        World w = loc.getWorld();
-        if (w == null) return 0;
-        int x = loc.getBlockX(), z = loc.getBlockZ(), head = loc.getBlockY() + 1;
-        int top = w.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
-        if (top <= head) return 0;
-        boolean[] above = new boolean[top - head];
-        for (int y = head + 1; y <= top; y++) {
-            Material m = w.getBlockAt(x, y, z).getType();
-            above[y - head - 1] = m.isSolid() && m.isOccluding();
+    void ensureHeight(WarMap map, SiteData.City city, World w) {
+        String done = map.name + "|" + city.key();
+        if (heightDone.contains(done)) return;
+        int[] manual = heightByCity.get(city.key());
+        if (manual != null) { map.engine.setHeightRange(city.key(), manual[0], manual[1]); heightDone.add(done); return; }
+        var a = city.area();
+        long width = (long) a.maxX - a.minX + 1, depth = (long) a.maxZ - a.minZ + 1;
+        int step = (int) Math.max(2, Math.ceil(Math.sqrt(width * depth / 800.0)));   // at most ~800 points
+        int low = Integer.MAX_VALUE, high = Integer.MIN_VALUE, seen = 0, missing = 0;
+        for (int x = a.minX; x <= a.maxX; x += step) for (int z = a.minZ; z <= a.maxZ; z += step) {
+            if (!a.contains(x + 0.5, z + 0.5)) continue;
+            if (!w.isChunkLoaded(x >> 4, z >> 4)) { missing++; continue; }
+            int top = w.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+            low = Math.min(low, top); high = Math.max(high, top); seen++;
         }
-        return Rules.groundAbove(above);
+        if (seen == 0) return;
+        map.engine.setHeightRange(city.key(), low - heightBelow, high + heightAbove);
+        if (missing == 0) heightDone.add(done);
+    }
+
+    /** Forgets the heights of a map's cities (its site data changed). */
+    void forgetHeights(WarMap map) {
+        if (map.engine != null) map.engine.clearHeightRanges();
+        heightDone.removeIf(k -> k.startsWith(map.name + "|"));
     }
 
     /** Once a second: who stands where, and what the clock does about it. */
@@ -396,7 +426,9 @@ public final class BmcWarPlugin extends JavaPlugin {
                 int side = sideOf(p, s, war);
                 if (side < 0) continue;
                 var loc = p.getLocation();
-                var at = new CaptureEngine.Present(p.getName(), side, loc.getX(), loc.getZ(), depthUnderground(p));
+                SiteData.City here = cityAt(s, loc.getX(), loc.getZ());
+                if (here != null) ensureHeight(map, here, p.getWorld());
+                var at = new CaptureEngine.Present(p.getName(), side, loc.getX(), loc.getZ(), 0, loc.getBlockY());
                 present.add(at); who.put(at, p);
             }
             for (CaptureEngine.Event e : engine.tick(s, war, present, dt)) { record(e, present); announce(e); }
