@@ -29,7 +29,7 @@ capture:
   #   Fort       = a Fort that is not a Settlement: drawn as a Fort, designated "Fort" on the site, or a Capital that is not a
   #                Settlement (5.5.6, 5.6.7)
   #   Locality   = everything else: taken the moment an attacker is inside with no opponent there
-  # A Warzone (Forts joined by a yellow line on the site's map) is captured as one, in the time of its longest locality (7.8.7).
+  # Warzones are not used: cities joined by a yellow line on the site's map are captured one by one (the line is just a Connection).
   seconds:
     Settlement: 30
     Fort: 15

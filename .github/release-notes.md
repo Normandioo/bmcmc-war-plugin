@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.14.0
+- **No more Warzones.** Cities joined by a yellow line on the site's map are captured one by one, each in its own time; the line is just a Connection between them. Before, they were captured together as one unit.
+
 ### New in 0.13.1
 - **Fix: standing inside a city's capture limit, the plugin said you were in another place.** A locality with no capture limit of its own reaches over its whole province, and the plugin took the first one it found. Now a city's own drawn limit always wins over a province or a round area. Seen in Cumania IV: inside Peshbron the plugin said "Unnamed3".
 - Bridges and Straits in the site's data (`BridgeOpenRed`, `StraitClosed`...) are never cities. (The site also stopped exporting them as localities.)

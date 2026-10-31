@@ -17,7 +17,7 @@ import java.util.Set;
  * A war's front, worked out the way the site's War mapmode does it (js/warmap.js, "Wars without a map"), naval rules left out:
  *   - its Theater (7.1.2-7.1.4): a Restricted War's "theater", else every city of its Belligerents; the rest is neutral
  *   - who holds each city: its dynmap icon, else its own nation's side
- *   - Warzones (5.5.14-15, 7.8.7): cities joined by a yellow line are one unit, held by whoever holds most of it
+ *   - Warzones (5.5.14-15, 7.8.7) are NOT used: a yellow line is a plain Connection and each city is captured on its own
  *   - Connections (5.5.8-10), through open Bridges and Straits (7.7.10-14), and across clusters of neutral cities between the
  *     two cities of the war with the fewest neutral ones in between (7.7.3-4); a tie needs Staff's pick ("shortCircuits")
  *   - Encircled: cut off from every Capital (or Supply Capital) its side holds (7.8.9, 7.8.11)
@@ -107,12 +107,10 @@ public final class WarGraph {
             control.put(c.key(), ctl);
         }
 
-        // Warzones: cities joined by yellow lines are one unit (7.8.7)
+        // Every city is its own unit. Warzones (7.8.7) are not used on this server (the owner, 2026-10-31): a yellow line is only a
+        // Connection, and each city on it is captured on its own.
         Map<String, String> parent = new HashMap<>();
         for (SiteData.City c : site.cities()) parent.put(c.key(), c.key());
-        if (net != null) for (String[] w : net.warzones()) {
-            if (parent.containsKey(w[0]) && parent.containsKey(w[1])) parent.put(find(parent, w[0]), find(parent, w[1]));
-        }
         Map<String, Unit> byRoot = new LinkedHashMap<>();
         for (SiteData.City c : site.cities()) {
             Unit u = byRoot.computeIfAbsent(find(parent, c.key()), k -> { Unit nu = new Unit(); g.units.add(nu); return nu; });

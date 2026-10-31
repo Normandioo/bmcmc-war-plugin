@@ -14,7 +14,7 @@ import java.util.Set;
  * The capture rule (7.8), done by the clock: a side that stays inside a locality's land for its time, with nobody of the side
  * holding it inside, takes it. Anyone of the holding side inside is resistance: the locality shows as Contested. Whoever holds a
  * locality is what its dynmap icon says, so a moderator changing the icon by hand still counts.
- * A Warzone (7.8.7) is captured as one: standing in any of its localities counts, and all of them change hands together.
+ * Each city is captured on its own (Warzones, 7.8.7, are not used: a yellow line on the site is just a Connection).
  * Only a locality of the war's Theater may be captured, only while In Play (7.8.1, when the rule is on and the site sends its
  * Connections), and only during an Engagement that covers it (7.8.8, when the rule is on).
  * No Minecraft classes in here: the plugin feeds it the players' positions once a second.

@@ -119,23 +119,18 @@ public class WarCheck {
         eng.stopEngagement(site, war);
         check(!icons.containsKey(fort.key()), "and goes back to its holder when the Raid ends");
 
-        // 6. a Warzone is captured as one (7.8.7)
+        // 6. no Warzones: a yellow line is a Connection, and each city on it is captured on its own
         String wz = json.replace("[\"Cubatao(Lombriga)\",\"Itapecuru(Lombriga)\"]", "[\"Cubatao(Lombriga)\",\"Itapecuru(Lombriga)\",1]");
         SiteData zsite = SiteData.parse(wz, 40);
-        check(zsite.network().warzones().size() == 1, "a yellow line between Cubatao and Itapecuru makes a warzone");
+        WarGraph zg = WarGraph.solve(zsite, zsite.war("LombriganWar"), MARKERS, true);
+        check(!zg.unitOf(zsite.city(cubatao.key())).warzone() && zg.unitOf(zsite.city(cubatao.key())) != zg.unitOf(zsite.city(itapecuru.key())),
+                "a yellow line between Cubatao and Itapecuru does not join them into one warzone");
         icons.clear();
         eng = new CaptureEngine(rules(false, false), MARKERS);
-        ev = run(eng, zsite, war, List.of(at(zsite.city(cubatao.key()), 0)), 29);
-        check(ev.stream().noneMatch(e -> e.type() == CaptureEngine.Type.CAPTURED), "standing in Cubatao (a Locality) takes the warzone's 30 s, not 0");
-        ev = run(eng, zsite, war, List.of(at(zsite.city(cubatao.key()), 0)), 2);
-        check(icons.get(cubatao.key()) == 0 && icons.get(itapecuru.key()) == 0 && ev.stream().filter(e -> e.type() == CaptureEngine.Type.CAPTURED).count() == 1,
-                "then both localities change hands together, announced once");
+        ev = run(eng, zsite, war, List.of(at(zsite.city(cubatao.key()), 0), at(zsite.city(itapecuru.key()), 1)), 1);
+        check(icons.get(cubatao.key()) != null && icons.get(cubatao.key()) == 0 && !Integer.valueOf(Markers.CONTESTED).equals(icons.get(itapecuru.key())),
+                "an attacker alone in Cubatao takes it, even with a defender in Itapecuru; Itapecuru is not contested");
         icons.clear();
-        eng = new CaptureEngine(rules(false, false), MARKERS);
-        ev = run(eng, zsite, war, List.of(at(zsite.city(cubatao.key()), 0), at(zsite.city(itapecuru.key()), 1)), 3);
-        check(icons.get(cubatao.key()) == Markers.CONTESTED && icons.get(itapecuru.key()) == Markers.CONTESTED, "an attacker in one and a defender in the other: the whole warzone is contested");
-        ev = run(eng, zsite, war, List.of(), 1);
-        check(!icons.containsKey(cubatao.key()) && !icons.containsKey(itapecuru.key()), "both go back when they leave");
 
         // 7. Theater: a Restricted War over Lombriga only
         String restricted = json.replace("\"id\":\"LombriganWar\"", "\"id\":\"LombriganWar\",\"theater\":\"Lombriga\"");
