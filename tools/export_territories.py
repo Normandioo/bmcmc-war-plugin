@@ -772,8 +772,12 @@ def main():
                               'open': not m.group(3).endswith('Closed'),
                               'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty})
             continue
-        if not m or (plain(m.group(1)), m.group(2)) not in by_key: continue   # sea tiles, anything not in localities.json
-        name, country, value = by_key[(plain(m.group(1)), m.group(2))]
+        if not m: continue
+        if loc_file:
+            if (plain(m.group(1)), m.group(2)) not in by_key: continue   # sea tiles, anything not in localities.json
+            name, country, value = by_key[(plain(m.group(1)), m.group(2))]
+        else:   # a world with no localities.json (Cumania IV): every marker on the map is a locality
+            name, country, value = m.group(1), m.group(2), {}
         net_nodes.append({'id': f'{name}({country})', 'kind': 'locality', 'open': True,
                           'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty})
         x, z = to_block(float(el.get('cx')) + tx, float(el.get('cy')) + ty)
