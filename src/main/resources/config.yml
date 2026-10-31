@@ -10,12 +10,16 @@ site:
 #   site         = the territories.json the site publishes for that map
 #   dynmap-world = the dynmap world its city markers are in (usually the same name as the world)
 #   wars         = which wars to run there (their ids in that map's diplomacy.json); [] = every war marked "live": true that has not ended
+#   dynmap-layers = true: the plugin draws the map on that world's dynmap from the site (for a world with nothing drawn there by hand):
+#                   each nation's land on its war's Strategic Map, the capture limits (filled with the colour of whoever holds
+#                   each city, yellow while contested) and a marker for every city that has none (with the site's icons). Default false.
 # Nobody counts on a map unless they stand in its world. To add an event map, copy the gaia entry and change the four values, e.g.:
 #   evento:
 #     world: evento
 #     site: https://bmcmc.online/evento/territories.json
 #     dynmap-world: evento
 #     wars: []
+#     dynmap-layers: true
 maps:
   gaia:
     world: world

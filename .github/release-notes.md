@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.12.0
+- **The plugin can draw a war map on dynmap** for a world with nothing drawn there (an event map): set `dynmap-layers: true` on that map in `maps`. It draws each nation's land from its war's Strategic Map on the site ("War territories"), every city's capture limit, filled with the colour of the side holding it and yellow while contested ("Capture limits"), and a marker for every city that has none, with the site's icons ("Cities"). The city markers are saved by dynmap (their icon is who holds the city); the rest is drawn again whenever the site's data changes. Needs the site's export with `war.territories`.
+
 ### New in 0.11.0 - the Referee's tools (7.10.4-7.10.6)
 - **`/bmcwar engagement pause` / `resume`**: the Referee stops the engagement for a moment (a crash, a dispute): nothing can be captured and its time stands still; resumed, it goes on with the time it had left. Captures under way when it was paused start over.
 - **`/bmcwar undo [war]`**: undoes the latest capture; its localities get back the icons they had just before. Again goes one further back (up to 50, since the server started). An engagement the capture ended (objective taken, capitulation) is not started again: start a new one.

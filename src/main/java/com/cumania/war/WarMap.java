@@ -1,5 +1,6 @@
 package com.cumania.war;
 
+import com.cumania.war.dynmap.DynmapLayers;
 import com.cumania.war.dynmap.DynmapMarkers;
 import com.cumania.war.engine.CaptureEngine;
 import com.cumania.war.engine.Markers;
@@ -23,10 +24,13 @@ final class WarMap {
     volatile SiteData site;
     Markers markers;
     DynmapMarkers dynmap;
+    /** Territories, capture limits and city markers drawn on dynmap from the site (dynmap-layers: true), or null. */
+    DynmapLayers layers;
+    final boolean drawLayers;
     CaptureEngine engine;
 
-    WarMap(String name, String world, String url, String dynmapWorld, List<String> wars, Path cache) {
-        this.name = name; this.world = world; this.url = url; this.dynmapWorld = dynmapWorld; this.wars = wars; this.cache = cache;
+    WarMap(String name, String world, String url, String dynmapWorld, List<String> wars, Path cache, boolean drawLayers) {
+        this.name = name; this.world = world; this.url = url; this.dynmapWorld = dynmapWorld; this.wars = wars; this.cache = cache; this.drawLayers = drawLayers;
     }
 
     /** Whether this war is one of this map's (the same object, or a war of the same id on its current data). */
@@ -37,5 +41,10 @@ final class WarMap {
         return s.war(war.id()) != null;
     }
 
-    void rebuildMarkers() { if (dynmap != null && site != null) dynmap.rebuild(site); }
+    /** Looks the city markers up again; with dynmap-layers, draws the map first (only when the site's data changed) and adds missing city markers. */
+    void rebuildMarkers(List<SiteData.War> handled) {
+        if (dynmap == null || site == null) return;
+        dynmap.rebuild(site);
+        if (layers != null && layers.build(site, handled, dynmap::has)) dynmap.rebuild(site);
+    }
 }

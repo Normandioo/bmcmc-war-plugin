@@ -72,12 +72,25 @@ public final class SiteData {
     private final Network network;                    // null when the site sends no Connections
     private final Map<String, City> cityByKey = new HashMap<>();
     private final String generated;
+    /** A nation's land on a war's Strategic Map (country key, rings in blocks). */
+    public record Area(String country, List<int[]> rings) {}
+    private Map<String, List<Area>> territories = Map.of();   // war id (lower case) -> its nations' land
+    private Map<String, Integer> colors = Map.of();           // country key -> its colour on the site
 
     private SiteData(List<City> cities, List<War> wars, Map<String, String> siteNameByIgn, Map<String, String> countryBySite,
                      Map<String, String> countryByTag, Map<String, String> overlordOf, Network network, String generated) {
         this.cities = cities; this.wars = wars; this.siteNameByIgn = siteNameByIgn; this.countryBySite = countryBySite;
         this.countryByTag = countryByTag; this.overlordOf = overlordOf; this.network = network; this.generated = generated;
         for (City c : cities) cityByKey.putIfAbsent(c.key(), c);
+    }
+
+    /** Each nation's land on this war's Strategic Map (empty when the site sends none: a war without its own map). */
+    public List<Area> territories(War war) { return war == null || war.id() == null ? List.of() : territories.getOrDefault(war.id().toLowerCase(Locale.ROOT), List.of()); }
+
+    /** The country's colour on the site (0xRRGGBB), or null. */
+    public Integer countryColor(String country) {
+        String k = countryOfTag(country);
+        return k == null ? null : colors.get(k);
     }
 
     /** The Connections from the site, or null when it sends none (then In Play cannot be worked out). */
@@ -245,7 +258,21 @@ public final class SiteData {
             String over = byTag.get(simple(c.diplomacy.overlord.get(0)));   // the site writes the overlord's display name
             if (over != null && !over.equals(e.getKey())) overlords.put(e.getKey(), over);
         }
-        return new SiteData(List.copyOf(cities), List.copyOf(wars), byIgn, countryBySite, byTag, overlords, network, file.generated == null ? "" : file.generated);
+        SiteData out = new SiteData(List.copyOf(cities), List.copyOf(wars), byIgn, countryBySite, byTag, overlords, network, file.generated == null ? "" : file.generated);
+        Map<String, List<Area>> lands = new HashMap<>();
+        if (file.war != null && file.war.wars != null) for (TerritoryFile.WarInfo w : file.war.wars) {
+            if (w == null || w.id == null || w.territories == null) continue;
+            List<Area> areas = new ArrayList<>();
+            for (TerritoryFile.Zone z : w.territories) if (z != null && z.country != null && z.rings != null && !z.rings.isEmpty()) areas.add(new Area(z.country, List.copyOf(z.rings)));
+            lands.put(w.id.toLowerCase(Locale.ROOT), List.copyOf(areas));
+        }
+        Map<String, Integer> cols = new HashMap<>();
+        if (file.countries != null) for (Map.Entry<String, TerritoryFile.Country> e : file.countries.entrySet()) {
+            Integer rgb = e.getValue() == null ? null : parseColor(e.getValue().color);
+            if (rgb != null) cols.put(e.getKey(), rgb);
+        }
+        out.territories = Map.copyOf(lands); out.colors = Map.copyOf(cols);
+        return out;
     }
 
     private static boolean isPast(String iso) {

@@ -17,6 +17,9 @@ public final class Polygon {
         minX = x0; minZ = z0; maxX = x1; maxZ = z1;
     }
 
+    /** The rings, flat [x0, z0, x1, z1, ...] in blocks. */
+    public List<int[]> rings() { return rings; }
+
     public boolean contains(double x, double z) {
         if (x < minX || x > maxX || z < minZ || z > maxZ) return false;
         boolean inside = false;
