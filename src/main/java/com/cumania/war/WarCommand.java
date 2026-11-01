@@ -427,7 +427,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         if (before == after) { say(sender, link + " is " + (after ? "open" : "closed") + (open == null ? ", as the site says." : " (kept so, also after a restart)."), NamedTextColor.GRAY); return; }
         plugin.broadcast(war, Component.text("The bridge " + link + " was " + what + (after ? ": it Connects its ends again." : ": it no longer Connects its ends (7.7.11)."), NamedTextColor.GOLD));
         plugin.log(war, "BRIDGE " + link + " " + (after ? "OPENED" : "CLOSED") + " by " + sender.getName() + (force ? " (forced)" : ""));
-        say(sender, "Done. Also set it in the site's diplomacy.json (\"bridges\") if the site's map should show it.", NamedTextColor.GRAY);
+        say(sender, "Done. Dynmap shows it " + (after ? "open" : "closed") + ", and the site follows within a few seconds.", NamedTextColor.GRAY);
     }
 
     private static boolean bridgeOpen(SiteData.War war, SiteData.Network net, CaptureEngine engine, String link) {

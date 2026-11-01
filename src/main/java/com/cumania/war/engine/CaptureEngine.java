@@ -141,6 +141,9 @@ public final class CaptureEngine {
 
     private final Map<String, Map<String, Boolean>> bridgeStates = new HashMap<>();
 
+    /** Every war's: war id -> (link key -> open). */
+    public Map<String, Map<String, Boolean>> allBridges() { return bridgeStates; }
+
     /** Bridges and Straits the staff opened or closed in this war: link key -> open. */
     public Map<String, Boolean> bridges(SiteData.War war) { return bridgeStates.getOrDefault(war.id(), Map.of()); }
 

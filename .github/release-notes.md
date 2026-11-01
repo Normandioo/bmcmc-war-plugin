@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.16.0
+- **A bridge opened or closed with `/bmcwar bridge` now shows on dynmap and on the site.** The plugin swaps the bridge's dynmap icon (`BridgeOpenRed` <-> `BridgeClosedRed`, the colour stays), and the site's war map reads it from there within a few seconds. The bridge needs a marker on dynmap with a `Bridge...` or `Strait...` icon, and dynmap needs the `BridgeClosed...` icons; if one is missing, the console says so once. No need to edit `diplomacy.json` any more.
+
 ### New in 0.15.0
 - **`/bmcwar bridge`: open and close Bridges and Straits (7.7.10-14).** `/bmcwar bridge` lists the war's bridges, open or closed, and who holds each end. `/bmcwar bridge <bridge> close` closes one: it no longer Connects its ends (7.7.11), so the cities across it may stop being In Play or become Encircled. `open` opens it again; `site` gives it back to what the site's map says. By the Laws only the side holding both ends may do it, between engagements (7.7.13): the plugin checks that, and `force` skips the check. The setting is kept in `plugins/BmcWar/bridges.yml` across restarts; set it in the site's `diplomacy.json` too if the site's map should show it.
 

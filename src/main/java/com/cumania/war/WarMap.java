@@ -7,6 +7,7 @@ import com.cumania.war.site.SiteData;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One map the wars are fought on: a Minecraft world, the site's territories.json for it (its cities, wars and countries), the dynmap
@@ -37,5 +38,9 @@ final class WarMap {
         return s.war(war.id()) != null;
     }
 
-    void rebuildMarkers() { if (dynmap != null && site != null) dynmap.rebuild(site); }
+    void rebuildMarkers() {
+        if (dynmap == null || site == null) return;
+        dynmap.rebuild(site);
+        if (engine != null) for (Map<String, Boolean> links : engine.allBridges().values()) links.forEach(dynmap::writeBridge);   // the staff's bridges (/bmcwar bridge)
+    }
 }

@@ -32,6 +32,8 @@ public final class DynmapMarkers implements Markers {
     private final String world;
     private final Consumer<String> warn;
     private final Map<String, Marker> byCity = new HashMap<>();
+    private final Map<String, Marker> byLink = new HashMap<>();   // Bridge / Strait key -> its marker
+    private static final Pattern LINK_ICON = Pattern.compile("^(Bridge|Strait)(Open|Closed)?");
     private final Set<String> warned = new HashSet<>();
 
     public DynmapMarkers(DynmapAPI api, String world, Consumer<String> warn) { this.api = api; this.world = world; this.warn = warn; }
@@ -40,8 +42,9 @@ public final class DynmapMarkers implements Markers {
     public void rebuild(SiteData site) {
         MarkerAPI markers = api.getMarkerAPI();
         byCity.clear();
+        byLink.clear();
         if (markers == null) return;
-        Map<String, Marker> byId = new HashMap<>(), byMapId = new HashMap<>(), byName = new HashMap<>();
+        Map<String, Marker> byId = new HashMap<>(), byMapId = new HashMap<>(), byName = new HashMap<>(), linkByName = new HashMap<>();
         java.util.List<Marker> all = new java.util.ArrayList<>();
         for (MarkerSet set : markers.getMarkerSets()) for (Marker m : set.getMarkers()) {
             if (m.getWorld() != null && !m.getWorld().equals(world)) continue;
@@ -52,6 +55,7 @@ public final class DynmapMarkers implements Markers {
             if (mid.matches()) byMapId.putIfAbsent(SiteData.key(mid.group(1), mid.group(2)), m);
             byName.putIfAbsent(clean(m.getLabel()).toLowerCase(Locale.ROOT), m);
             byName.putIfAbsent(id.toLowerCase(Locale.ROOT), m);
+            if (LINK_ICON.matcher(iconId(m)).find()) { linkByName.putIfAbsent(clean(m.getLabel()).toLowerCase(Locale.ROOT), m); linkByName.putIfAbsent(id.toLowerCase(Locale.ROOT), m); }
         }
         for (SiteData.City c : site.cities()) {
             Marker m = byId.get(c.key());
@@ -66,6 +70,30 @@ public final class DynmapMarkers implements Markers {
             }
             if (m != null) byCity.put(c.key(), m);
         }
+        // Bridges and Straits: by id, the map's id or name, among markers with a Bridge... / Strait... icon
+        if (site.network() != null) for (String link : site.network().linkOpen().keySet()) {
+            Marker m = null;
+            for (Marker o : new Marker[]{byId.get(link), byMapId.get(link), linkByName.get(link), linkByName.get(link.replaceFirst("\\(.*\\)$", ""))})
+                if (m == null && o != null && LINK_ICON.matcher(iconId(o)).find()) m = o;
+            if (m != null) byLink.put(link, m);
+        }
+    }
+
+    /**
+     * Shows a Bridge or Strait open or closed on dynmap: "BridgeOpenRed" becomes "BridgeClosedRed" and back (the colour stays). The
+     * site reads it from there (js/warlive.js). False when it has no marker, or dynmap has no such icon.
+     */
+    public boolean writeBridge(String link, boolean open) {
+        Marker m = byLink.get(link);
+        if (m == null) { warnOnce("No dynmap marker with a Bridge or Strait icon found for " + link + ": the site will not show it " + (open ? "open" : "closed") + "."); return false; }
+        Matcher k = LINK_ICON.matcher(iconId(m));
+        if (!k.find()) return false;
+        String id = k.group(1) + (open ? "Open" : "Closed") + iconId(m).substring(k.end());
+        if (id.equals(iconId(m))) return true;
+        MarkerIcon icon = api.getMarkerAPI().getMarkerIcon(id);
+        if (icon == null) { warnOnce("Dynmap has no icon called \"" + id + "\" (needed for " + link + ")."); return false; }
+        m.setMarkerIcon(icon);
+        return true;
     }
 
     private static String clean(String raw) { return raw == null ? "" : raw.replaceAll("<[^>]*>", "").replaceAll("§.", "").trim(); }

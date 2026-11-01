@@ -165,6 +165,10 @@ public final class BmcWarPlugin extends JavaPlugin {
         WarMap m = mapOf(war);
         if (m == null) return;
         m.engine.setBridge(war, link, open);
+        if (m.dynmap != null && m.site != null && m.site.network() != null) {   // shown on dynmap, where the site reads it
+            boolean now = open != null ? open : war.bridges().getOrDefault(link, m.site.network().linkOpen().getOrDefault(link, true));
+            m.dynmap.writeBridge(link, now);
+        }
         var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(bridgesFile());
         yaml.set(m.name + "." + war.id() + "." + link, open == null ? null : open ? "open" : "closed");
         try { getDataFolder().mkdirs(); yaml.save(bridgesFile()); }
