@@ -383,12 +383,13 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         if (net == null || net.linkOpen().isEmpty()) { say(sender, "The site's map has no Bridges or Straits for " + war.name() + ".", NamedTextColor.GRAY); return; }
         CaptureEngine engine = plugin.engine(war);
         WarGraph g = engine.graph(site, war);
+        final SiteData.War w = war;
 
         if (rest.isEmpty()) {   // the list
             say(sender, war.name() + ": bridges and straits", NamedTextColor.GOLD);
             for (String link : new java.util.TreeSet<>(net.linkOpen().keySet())) {
                 boolean open = bridgeOpen(war, net, engine, link);
-                String ends = String.join(" - ", bridgeEnds(net, link).stream().map(k -> endLabel(war, site, g, k)).toList());
+                String ends = String.join(" - ", bridgeEnds(net, link).stream().map(k -> endLabel(w, site, g, k)).toList());
                 say(sender, "  " + link + ": " + (open ? "open" : "CLOSED") + (engine.bridges(war).containsKey(link) ? " (set here)" : "") + (ends.isEmpty() ? "" : ", between " + ends),
                         open ? NamedTextColor.GRAY : NamedTextColor.YELLOW);
             }
@@ -415,7 +416,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             for (String k : bridgeEnds(net, link)) { SiteData.City c = site.city(k); WarGraph.Unit u = c == null ? null : g.unitOf(c); holders.add(u == null ? -1 : u.control); }
             if (holders.size() != 1 || holders.iterator().next() < 0) {
                 say(sender, "Only a side holding both ends may open or close it (7.7.13), and its ends are " + String.join(" and ",
-                        bridgeEnds(net, link).stream().map(k -> endLabel(war, site, g, k)).toList()) + ". Add \"force\" to do it anyway.", NamedTextColor.RED);
+                        bridgeEnds(net, link).stream().map(k -> endLabel(w, site, g, k)).toList()) + ". Add \"force\" to do it anyway.", NamedTextColor.RED);
                 return;
             }
         }
