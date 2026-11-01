@@ -7,7 +7,7 @@ softdepend: [dynmap]
 commands:
   bmcwar:
     description: Status of the wars, and staff tools
-    usage: /bmcwar status | where | table | debug | engagement [start <kind> [cities...] | go | pause | resume | stop] | undo [war] | log [war] [lines] | set <city> <state> | reset [war] confirm | reload
+    usage: /bmcwar status | where | table | debug | engagement [start <kind> [cities...] | go | pause | resume | stop] | undo [war] | log [war] [lines] | bridge [<bridge> open|close|site [force]] | set <city> <state> | reset [war] confirm | reload
     permission: bmcwar.use
 permissions:
   bmcwar.use:

@@ -132,6 +132,7 @@ public final class BmcWarPlugin extends JavaPlugin {
             }
             m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(c.getBoolean("engagement.end-on-capitulation", true))
                     .endOnObjective(c.getBoolean("engagement.end-on-objective", true));
+            loadBridges(m);
             for (WarMap o : old2) if (o.url.equals(m.url)) m.site = o.site;   // keep what was downloaded while the new data arrives
             if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
                 try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
@@ -143,6 +144,32 @@ public final class BmcWarPlugin extends JavaPlugin {
     }
 
     List<WarMap> maps() { return maps; }
+
+    // ----- Bridges the staff opened or closed (/bmcwar bridge), kept in plugins/BmcWar/bridges.yml across restarts -----
+
+    private java.io.File bridgesFile() { return new java.io.File(getDataFolder(), "bridges.yml"); }
+
+    private void loadBridges(WarMap m) {
+        if (!bridgesFile().exists()) return;
+        var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(bridgesFile());
+        var section = yaml.getConfigurationSection(m.name);
+        if (section == null) return;
+        for (String war : section.getKeys(false)) {
+            var links = section.getConfigurationSection(war);
+            if (links != null) for (String link : links.getKeys(false)) m.engine.setBridge(war, link, !"closed".equalsIgnoreCase(links.getString(link)));
+        }
+    }
+
+    /** Opens (true) or closes (false) a Bridge or Strait in this war, or (null) gives it back to the site; kept across restarts. */
+    void setBridge(SiteData.War war, String link, Boolean open) {
+        WarMap m = mapOf(war);
+        if (m == null) return;
+        m.engine.setBridge(war, link, open);
+        var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(bridgesFile());
+        yaml.set(m.name + "." + war.id() + "." + link, open == null ? null : open ? "open" : "closed");
+        try { getDataFolder().mkdirs(); yaml.save(bridgesFile()); }
+        catch (java.io.IOException e) { getLogger().warning("Could not save bridges.yml: " + e); }
+    }
 
     /** The map whose world the player is in, or null. */
     WarMap mapAt(Player p) {

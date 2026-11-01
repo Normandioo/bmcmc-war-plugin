@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "bridge", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | bridge [<bridge> <open|close|site> [force]] [war=<id>] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -43,6 +43,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "reset" -> { if (admin(sender)) reset(sender, args); }
             case "undo" -> { if (admin(sender)) undo(sender, args); }
             case "log" -> { if (admin(sender)) log(sender, args); }
+            case "bridge", "bridges" -> bridge(sender, args);
             case "engagement", "eng" -> engagement(sender, args);
             case "table", "capitulation", "cap" -> {
                 if (!(sender instanceof Player p)) { say(sender, "Only a player can show the table.", NamedTextColor.GRAY); return true; }
@@ -348,6 +349,108 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         if (more > 0) say(sender, more + " more capture(s) can be undone; the next is " + plugin.engine(war).captures(war).get(0).label() + ".", NamedTextColor.GRAY);
     }
 
+    /**
+     * /bmcwar bridge [war=<id>]: the war's Bridges and Straits, open or closed. /bmcwar bridge <bridge> open|close|site [force]: the staff
+     * opens or closes one (7.7.10-14). A closed one does not Connect its ends (7.7.11), which changes what is In Play and Encircled.
+     * By the Laws only the side holding both its ends may do it, between engagements (7.7.13): "force" skips that check.
+     * "site" gives it back to what the site's map says. Kept in plugins/BmcWar/bridges.yml across restarts.
+     */
+    private void bridge(CommandSender sender, String[] args) {
+        List<String> rest = new ArrayList<>();
+        String warId = null;
+        boolean force = false;
+        for (int i = 1; i < args.length; i++) {
+            String a = args[i];
+            if (a.toLowerCase(Locale.ROOT).startsWith("war=")) warId = a.substring(4);
+            else if (a.equalsIgnoreCase("force")) force = true;
+            else rest.add(a);
+        }
+        List<SiteData.War> wars = plugin.handledWars();
+        if (wars.isEmpty()) { say(sender, "No war is being run.", NamedTextColor.RED); return; }
+        SiteData.War war = pick(sender, wars, warId);
+        if (war == null && warId == null) {
+            WarMap here = sender instanceof Player p ? plugin.mapAt(p) : null;
+            List<SiteData.War> mine = here == null ? List.of() : plugin.handledWars(here);
+            if (mine.size() == 1) war = mine.get(0);
+        }
+        if (war == null) {
+            say(sender, warId == null ? "Several wars are running: add war=<id>, one of " + String.join(", ", wars.stream().map(plugin::warId).toList())
+                    : "No running war with the id " + warId + ".", NamedTextColor.RED);
+            return;
+        }
+        SiteData site = plugin.site(war);
+        SiteData.Network net = site == null ? null : site.network();
+        if (net == null || net.linkOpen().isEmpty()) { say(sender, "The site's map has no Bridges or Straits for " + war.name() + ".", NamedTextColor.GRAY); return; }
+        CaptureEngine engine = plugin.engine(war);
+        WarGraph g = engine.graph(site, war);
+
+        if (rest.isEmpty()) {   // the list
+            say(sender, war.name() + ": bridges and straits", NamedTextColor.GOLD);
+            for (String link : new java.util.TreeSet<>(net.linkOpen().keySet())) {
+                boolean open = bridgeOpen(war, net, engine, link);
+                String ends = String.join(" - ", bridgeEnds(net, link).stream().map(k -> endLabel(war, site, g, k)).toList());
+                say(sender, "  " + link + ": " + (open ? "open" : "CLOSED") + (engine.bridges(war).containsKey(link) ? " (set here)" : "") + (ends.isEmpty() ? "" : ", between " + ends),
+                        open ? NamedTextColor.GRAY : NamedTextColor.YELLOW);
+            }
+            if (sender.hasPermission("bmcwar.admin")) say(sender, "Change one with /bmcwar bridge <bridge> open|close|site", NamedTextColor.GRAY);
+            return;
+        }
+        if (!admin(sender)) return;
+        if (rest.size() < 2) { say(sender, "Usage: /bmcwar bridge <bridge> open|close|site [force] [war=<id>]", NamedTextColor.GRAY); return; }
+        String wanted = rest.get(0).toLowerCase(Locale.ROOT);
+        List<String> found = new ArrayList<>();
+        for (String link : net.linkOpen().keySet()) if (link.equals(wanted) || link.startsWith(wanted + "(")) found.add(link);
+        if (found.isEmpty()) { say(sender, "No bridge or strait called " + rest.get(0) + ". /bmcwar bridge lists them.", NamedTextColor.RED); return; }
+        if (found.size() > 1) { say(sender, "Several are called that: " + String.join(", ", found) + ". Write it as Name(Country).", NamedTextColor.RED); return; }
+        String link = found.get(0);
+        String action = rest.get(1).toLowerCase(Locale.ROOT);
+        Boolean open = switch (action) { case "open" -> true; case "close", "closed" -> false; case "site", "default" -> null; default -> Boolean.FALSE; };
+        if (open == Boolean.FALSE && !action.startsWith("close")) { say(sender, "Say open, close or site.", NamedTextColor.RED); return; }
+        if (open != null && !force) {
+            if (engine.engagement(war) != null) {
+                say(sender, "A bridge may only be opened or closed between engagements (7.7.13). Stop the engagement first, or add \"force\".", NamedTextColor.RED);
+                return;
+            }
+            java.util.Set<Integer> holders = new java.util.HashSet<>();
+            for (String k : bridgeEnds(net, link)) { SiteData.City c = site.city(k); WarGraph.Unit u = c == null ? null : g.unitOf(c); holders.add(u == null ? -1 : u.control); }
+            if (holders.size() != 1 || holders.iterator().next() < 0) {
+                say(sender, "Only a side holding both ends may open or close it (7.7.13), and its ends are " + String.join(" and ",
+                        bridgeEnds(net, link).stream().map(k -> endLabel(war, site, g, k)).toList()) + ". Add \"force\" to do it anyway.", NamedTextColor.RED);
+                return;
+            }
+        }
+        boolean before = bridgeOpen(war, net, engine, link);
+        plugin.setBridge(war, link, open);
+        boolean after = bridgeOpen(war, net, engine, link);
+        String what = open == null ? "back to what the site says: " + (after ? "open" : "closed") : after ? "opened" : "closed";
+        if (before == after) { say(sender, link + " is " + (after ? "open" : "closed") + (open == null ? ", as the site says." : " (kept so, also after a restart)."), NamedTextColor.GRAY); return; }
+        plugin.broadcast(war, Component.text("The bridge " + link + " was " + what + (after ? ": it Connects its ends again." : ": it no longer Connects its ends (7.7.11)."), NamedTextColor.GOLD));
+        plugin.log(war, "BRIDGE " + link + " " + (after ? "OPENED" : "CLOSED") + " by " + sender.getName() + (force ? " (forced)" : ""));
+        say(sender, "Done. Also set it in the site's diplomacy.json (\"bridges\") if the site's map should show it.", NamedTextColor.GRAY);
+    }
+
+    private static boolean bridgeOpen(SiteData.War war, SiteData.Network net, CaptureEngine engine, String link) {
+        Boolean set = engine.bridges(war).get(link);
+        return set != null ? set : war.bridges().getOrDefault(link, net.linkOpen().getOrDefault(link, true));
+    }
+
+    private static List<String> bridgeEnds(SiteData.Network net, String link) {
+        List<String> ends = new ArrayList<>();
+        for (String[] e : net.edges()) {
+            if (e[0].equals(link) && !net.isLink(e[1])) ends.add(e[1]);
+            else if (e[1].equals(link) && !net.isLink(e[0])) ends.add(e[0]);
+        }
+        return ends;
+    }
+
+    private static String endLabel(SiteData.War war, SiteData site, WarGraph g, String key) {
+        SiteData.City c = site.city(key);
+        if (c == null) return key;
+        WarGraph.Unit u = g.unitOf(c);
+        int side = u == null ? -1 : u.control;
+        return c.name() + " (" + (side >= 0 && side < war.sides().size() ? war.sides().get(side).name() : "nobody") + ")";
+    }
+
     /** /bmcwar log [war] [lines]: the latest lines of the war's log (the full one is in plugins/BmcWar/logs). */
     private void log(CommandSender sender, String[] args) {
         List<SiteData.War> wars = plugin.handledWars();
@@ -428,6 +531,12 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             else if (args.length >= 4 && args[1].equalsIgnoreCase("start") && site != null) {
                 for (SiteData.City c : site.cities()) if (c.name().toLowerCase(Locale.ROOT).startsWith(last) && out.size() < 40) out.add(c.name());
             }
+        } else if (args[0].equalsIgnoreCase("bridge")) {
+            String last = args[args.length - 1].toLowerCase(Locale.ROOT);
+            SiteData.Network net = site == null ? null : site.network();
+            if (args.length == 2 && net != null) { for (String l : net.linkOpen().keySet()) if (l.startsWith(last) && out.size() < 40) out.add(l); }
+            else if (args.length == 3) { for (String s : List.of("open", "close", "site")) if (s.startsWith(last)) out.add(s); }
+            else if (args.length == 4 && "force".startsWith(last)) out.add("force");
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("undo") || args[0].equalsIgnoreCase("log"))) {
             for (SiteData.War w : plugin.handledWars()) if (plugin.warId(w).toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) out.add(plugin.warId(w));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("reset")) {

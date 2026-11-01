@@ -83,6 +83,11 @@ public final class WarGraph {
     public List<String> theaterUnknown() { return theaterUnknown; }
 
     public static WarGraph solve(SiteData site, SiteData.War war, Markers markers, boolean encirclement) {
+        return solve(site, war, markers, encirclement, Map.of());
+    }
+
+    /** bridges: link key -> open, set on the server by the staff (/bmcwar bridge); wins over the war's and the map's. */
+    public static WarGraph solve(SiteData site, SiteData.War war, Markers markers, boolean encirclement, Map<String, Boolean> bridges) {
         WarGraph g = new WarGraph();
         SiteData.Network net = site.network();
         g.hasNetwork = net != null;
@@ -140,7 +145,8 @@ public final class WarGraph {
             else if (b != null && net.isLink(e[0])) linkEnds.computeIfAbsent(e[0], k -> new ArrayList<>()).add(e[1]);
         }
         for (Map.Entry<String, List<String>> e : linkEnds.entrySet()) {
-            boolean open = war.bridges().getOrDefault(e.getKey(), net.linkOpen().getOrDefault(e.getKey(), true));
+            Boolean set = bridges.get(e.getKey());
+            boolean open = set != null ? set : war.bridges().getOrDefault(e.getKey(), net.linkOpen().getOrDefault(e.getKey(), true));
             if (!open) continue;
             List<String> ends = e.getValue();
             for (int i = 0; i < ends.size(); i++) for (int j = i + 1; j < ends.size(); j++) link(g.unitByCity.get(ends.get(i)), g.unitByCity.get(ends.get(j)), false);

@@ -256,6 +256,36 @@ public class WarCheck {
         check(captured(ev, cubatao), "at Y 70 it is taken");
         check(!eng.outOfHeight(itapecuru, 5), "a city with no range worked out yet: every height counts");
 
+        // 15. a bridge closed by the staff (/bmcwar bridge, 7.7.11) no longer Connects its ends; "site" gives it back
+        {
+            SiteData.Network net = site.network();
+            String link = null; SiteData.City endA = null, endB = null;
+            WarGraph open0 = WarGraph.solve(site, war, MARKERS, true);
+            for (String l : new java.util.TreeSet<>(net.linkOpen().keySet())) {
+                List<String> ends = new ArrayList<>();
+                for (String[] e : net.edges()) { if (e[0].equals(l) && site.city(e[1]) != null) ends.add(e[1]); else if (e[1].equals(l) && site.city(e[0]) != null) ends.add(e[0]); }
+                if (ends.size() != 2) continue;
+                SiteData.City a1 = site.city(ends.get(0)), b1 = site.city(ends.get(1));
+                if (open0.unitOf(a1) == null || open0.unitOf(a1).neutral() || open0.unitOf(b1) == null || open0.unitOf(b1).neutral()) continue;
+                boolean direct = false;
+                for (String[] e : net.edges()) if (e[0].equals(a1.key()) && e[1].equals(b1.key()) || e[1].equals(a1.key()) && e[0].equals(b1.key())) direct = true;
+                if (!direct) { link = l; endA = a1; endB = b1; break; }
+            }
+            check(link != null, "a bridge between two cities of the war (" + link + ")");
+            if (link != null) {
+                check(open0.unitOf(endA).neighbours.containsKey(open0.unitOf(endB)), "open: " + endA.name() + " and " + endB.name() + " are Connected through it");
+                WarGraph shut = WarGraph.solve(site, war, MARKERS, true, Map.of(link, false));
+                check(!shut.unitOf(endA).neighbours.containsKey(shut.unitOf(endB)), "closed by the staff: they are not");
+                CaptureEngine be = new CaptureEngine(rules(false, false), MARKERS);
+                be.setBridge(war, link, false);
+                WarGraph bg = be.graph(site, war);
+                check(!bg.unitOf(endA).neighbours.containsKey(bg.unitOf(endB)), "the engine uses the staff's setting");
+                be.setBridge(war, link, null);
+                bg = be.graph(site, war);
+                check(bg.unitOf(endA).neighbours.containsKey(bg.unitOf(endB)) && be.bridges(war).isEmpty(), "back to the site's: Connected again");
+            }
+        }
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

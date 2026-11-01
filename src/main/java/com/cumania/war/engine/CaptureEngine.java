@@ -137,10 +137,26 @@ public final class CaptureEngine {
     /** The war's clock: seconds it has been ticked. */
     public double clock(SiteData.War war) { return clocks.getOrDefault(war.id(), 0.0); }
 
+    // ----- Bridges opened or closed by the staff (7.7.10-14) -----
+
+    private final Map<String, Map<String, Boolean>> bridgeStates = new HashMap<>();
+
+    /** Bridges and Straits the staff opened or closed in this war: link key -> open. */
+    public Map<String, Boolean> bridges(SiteData.War war) { return bridgeStates.getOrDefault(war.id(), Map.of()); }
+
+    /** Opens (true) or closes (false) a Bridge or Strait in this war; null goes back to what the site says. */
+    public void setBridge(SiteData.War war, String link, Boolean open) { setBridge(war.id(), link, open); }
+
+    public void setBridge(String warId, String link, Boolean open) {
+        Map<String, Boolean> m = bridgeStates.computeIfAbsent(warId, k -> new HashMap<>());
+        if (open == null) m.remove(link); else m.put(link, open);
+        graphs.remove(warId);   // the front is worked out again
+    }
+
     /** The front as of the last tick (or worked out now, when the war has not been ticked yet). */
     public WarGraph graph(SiteData site, SiteData.War war) {
         WarGraph g = graphs.get(war.id());
-        return g != null ? g : WarGraph.solve(site, war, markers, rules.encirclement());
+        return g != null ? g : WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war));
     }
 
     // ----- Engagements -----
@@ -253,7 +269,7 @@ public final class CaptureEngine {
             events.add(new Event(Type.ENGAGEMENT_END, war, null, -1, -1, List.of()));
             eng = null;
         }
-        WarGraph g = WarGraph.solve(site, war, markers, rules.encirclement());
+        WarGraph g = WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war));
         graphs.put(war.id(), g);
         // a nation that has just Capitulated (7.9.7): said once, and the engagement going on ends (nothing more is captured this tick)
         java.util.Set<String> now = new java.util.LinkedHashSet<>();
@@ -270,7 +286,7 @@ public final class CaptureEngine {
             if (end) { stopEngagement(site, war); eng = null; }
             for (Capitulation.Score c : fallen) events.add(new Event(Type.CAPITULATED, war, c.capital(), c.side(), end ? 1 : 0));
             if (end) {
-                graphs.put(war.id(), g = WarGraph.solve(site, war, markers, rules.encirclement()));   // a Raid's fort may have gone back
+                graphs.put(war.id(), g = WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war)));   // a Raid's fort may have gone back
                 return events;
             }
         }
@@ -281,7 +297,7 @@ public final class CaptureEngine {
             for (String key : eng.targets()) { SiteData.City c = site.city(key); if (c != null) targets.add(c); }
             stopEngagement(site, war);
             events.add(new Event(Type.OBJECTIVE_TAKEN, war, targets.get(0), won, -1, targets));
-            graphs.put(war.id(), WarGraph.solve(site, war, markers, rules.encirclement()));   // a Raid's fort has gone back
+            graphs.put(war.id(), WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war)));   // a Raid's fort has gone back
             return events;
         }
         int sides = war.sides().size();
