@@ -78,6 +78,9 @@ Chaves: `format, world, dimension, generated, countries, provinces, localities, 
   Os casos 1–6 usam os **valores antigos em minutos × 60** (600, 900...); os casos 7–10 (cidade neutra, cidade de 0 s, marcador ausente, `clear()`) usam a regra atual do `config.yml`. A checagem da LombriganWar só exige que ela exista com dois lados (no exemplo ela está `live=false`). Caso 11: limite de captura (`zones`); caso 12: cor no tipo; 13–16: tag, vassalo, subsolo, reset. Estado atual: 42/42 ok. Mais `test/WarCheck.java` (Law 7 + Engagement em espera + capitulação + objetivo + resistência zera + capital Locality = Fort + Referee + altura + pontes) 64/64. No sandbox, o Gson está em `/opt/apache-maven-*/lib/gson-*.jar`.
 - `test/DynmapCheck.java` testa o adaptador com marcadores falsos (precisa do `dynmap-api` no classpath).
 
+## Teste real
+- **2026-11-01 (domingo):** o plugin rodou num evento de guerra de larga escala no servidor, com **0 erros ou problemas** (relato do dono, 2026-11-03). Os itens abaixo eram as dúvidas de antes disso; os 1 e 2 estão confirmados na prática.
+
 ## O que NUNCA foi verificado (fazer primeiro num servidor de teste)
 1. O plugin nunca rodou num servidor Paper de verdade. Só a lógica pura foi testada; o código de Bukkit/dynmap só compila.
 2. A escrita do ícone no dynmap (nomes dos ícones, achar o marcador certo) e as mensagens de chat/action bar.
