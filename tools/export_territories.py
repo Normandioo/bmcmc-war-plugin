@@ -779,7 +779,7 @@ def war_block(meta, diplomacy, countries, localities, clock, root=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('world', nargs='?', help='world key in timeline-config.json (e.g. gaia); leave out with --all')
-    ap.add_argument('--all', action='store_true', help='every world of timeline-config.json with a "dynmap" entry, then worlds.json')
+    ap.add_argument('--all', action='store_true', help='every world of timeline-config.json with a "dynmap" entry')
     ap.add_argument('--root', default='.', help='site folder (default: current)')
     ap.add_argument('--dimension', default='minecraft:overworld')
     ap.add_argument('--refresh-skins', action='store_true', help='download every skin again (default: only missing ones)')
@@ -792,34 +792,10 @@ def main():
         return
     if args.out: ap.error('--out goes with a single world, not --all')
     worlds = json.loads((root / 'timeline-config.json').read_text(encoding='utf8'))['worlds']
-    index = []
     for key, cfg in worlds.items():
         if not isinstance(cfg, dict) or not cfg.get('dynmap') or not cfg.get('latestFile'): continue
         print(f'--- {key}')
         export_world(args, root, key)
-        dyn = cfg['dynmap']
-        index.append({
-            'key': key, 'name': cfg.get('name', key),
-            'territories': (Path(cfg['latestFile']).parent / 'territories.json').as_posix(),
-            # the Minecraft world (folder name) the war is fought in, and the dynmap world its markers are in
-            'world': cfg.get('minecraftWorld') or dyn.get('world') or key,
-            'dynmapWorld': dyn.get('world') or cfg.get('minecraftWorld') or key,
-        })
-    write_worlds_index(root / 'worlds.json', index)
-
-
-def write_worlds_index(target, index):
-    """worlds.json: the worlds whose territories.json this site publishes, for the BmcWar plugin to find them by itself."""
-    out = {'format': 1, 'worlds': index}
-    if target.exists():
-        try:
-            if json.loads(target.read_text(encoding='utf8')) == out:
-                print(f'{target}: unchanged ({len(index)} worlds)')
-                return
-        except ValueError:
-            pass
-    target.write_text(json.dumps(out, indent=1, ensure_ascii=False) + '\n', encoding='utf8')
-    print(f'{target}: {len(index)} worlds ({", ".join(w["key"] for w in index)})')
 
 
 def export_world(args, root, world):
