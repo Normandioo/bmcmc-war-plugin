@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "bridge", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "bridge", "maps", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | bridge [<bridge> <open|close|site> [force]] [war=<id>] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | bridge [<bridge> <open|close|site> [force]] [war=<id>] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | maps | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -44,6 +44,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "undo" -> { if (admin(sender)) undo(sender, args); }
             case "log" -> { if (admin(sender)) log(sender, args); }
             case "bridge", "bridges" -> bridge(sender, args);
+            case "maps", "worlds" -> { if (admin(sender)) maps(sender); }
             case "engagement", "eng" -> engagement(sender, args);
             case "table", "capitulation", "cap" -> {
                 if (!(sender instanceof Player p)) { say(sender, "Only a player can show the table.", NamedTextColor.GRAY); return true; }
@@ -428,6 +429,36 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         plugin.broadcast(war, Component.text("The bridge " + link + " was " + what + (after ? ": it Connects its ends again." : ": it no longer Connects its ends (7.7.11)."), NamedTextColor.GOLD));
         plugin.log(war, "BRIDGE " + link + " " + (after ? "OPENED" : "CLOSED") + " by " + sender.getName() + (force ? " (forced)" : ""));
         say(sender, "Done. Dynmap shows it " + (after ? "open" : "closed") + ", and the site follows within a few seconds.", NamedTextColor.GRAY);
+    }
+
+    /** /bmcwar maps: every war map, where it comes from, and whether its world, its data and its dynmap markers are there. */
+    private void maps(CommandSender sender) {
+        var list = plugin.siteWorlds();
+        String err = plugin.siteWorldsError();
+        say(sender, "War maps" + (list.isEmpty() && err == null ? "" : " (the site lists " + list.size() + " world" + (list.size() == 1 ? "" : "s")
+                + (err == null ? ")" : "; its last reading failed: " + err + ")")), NamedTextColor.GOLD);
+        if (plugin.maps().isEmpty()) say(sender, "  None yet: the site's worlds list has not been read.", NamedTextColor.YELLOW);
+        long now = System.currentTimeMillis();
+        for (WarMap m : plugin.maps()) {
+            boolean here = BmcWarPlugin.worldOf(m) != null;
+            SiteData s = m.site;
+            say(sender, "  " + m.name + (m.spec.source().equals("site") ? "" : " (from the config)") + ": world " + m.world
+                    + (here ? "" : " - NOT ON THIS SERVER, so nothing is downloaded or captured there"), here ? NamedTextColor.GREEN : NamedTextColor.GRAY);
+            if (!here) continue;
+            if (s == null) { say(sender, "    no data yet" + (m.error == null ? "" : ": " + m.error), NamedTextColor.YELLOW); continue; }
+            List<String> wars = plugin.handledWars(m).stream().map(SiteData.War::name).toList();
+            say(sender, "    " + s.cities().size() + " cities, " + (wars.isEmpty() ? "no live war" : "wars: " + String.join(", ", wars))
+                    + (m.fetchedAt == 0 ? ", from the saved copy" : ", updated " + Math.max(0, (now - m.fetchedAt) / 60000) + " min ago")
+                    + (m.error == null ? "" : " (last try failed: " + m.error + ")"), NamedTextColor.GRAY);
+            if (m.dynmap == null) say(sender, "    dynmap: not installed", NamedTextColor.YELLOW);
+            else {
+                int found = m.dynmap.matched(), all = s.cities().size();
+                say(sender, "    dynmap world " + m.dynmapWorld + ": " + found + " of " + all + " cities have a marker"
+                        + (found == 0 && all > 0 ? " - check the dynmap world's name (maps." + m.name + ".dynmap-world)" : ""), found < all ? NamedTextColor.YELLOW : NamedTextColor.GRAY);
+            }
+        }
+        for (var w : list) if (plugin.maps().stream().noneMatch(m -> m.spec.source().equals("site") && m.url.endsWith(String.valueOf(w.territories()))))
+            say(sender, "  " + w.key() + ": turned off in the config (maps." + w.key() + ".enabled: false)", NamedTextColor.GRAY);
     }
 
     private static boolean bridgeOpen(SiteData.War war, SiteData.Network net, CaptureEngine engine, String link) {

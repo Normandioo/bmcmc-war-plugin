@@ -83,6 +83,9 @@ public final class DynmapMarkers implements Markers {
      * Shows a Bridge or Strait open or closed on dynmap: "BridgeOpenRed" becomes "BridgeClosedRed" and back (the colour stays). The
      * site reads it from there (js/warlive.js). False when it has no marker, or dynmap has no such icon.
      */
+    /** How many of the site's cities have a marker found on dynmap. */
+    public int matched() { return byCity.size(); }
+
     public boolean writeBridge(String link, boolean open) {
         Marker m = byLink.get(link);
         if (m == null) { warnOnce("No dynmap marker with a Bridge or Strait icon found for " + link + ": the site will not show it " + (open ? "open" : "closed") + "."); return false; }

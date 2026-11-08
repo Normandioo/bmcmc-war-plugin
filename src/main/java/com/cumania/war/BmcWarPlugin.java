@@ -37,16 +37,17 @@ import java.util.Map;
  * of the holding side inside, takes it, and the city's icon in dynmap changes colour, which is what the site and the Xaero's mod read.
  * Cities, wars, sides and who plays for whom all come from the site's territories.json.
  */
-public final class BmcWarPlugin extends JavaPlugin {
+public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.Listener {
     private static final int[] DEFAULT_SIDE_COLORS = {0xD83A3A, 0x3A6FD8, 0x3AAE5A};
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build();
-    private final List<WarMap> maps = new ArrayList<>();
+    private final List<WarMap> maps = new java.util.concurrent.CopyOnWriteArrayList<>();   // read off the game thread by the downloads
     private long lastTick;
     private int rebuildCountdown;
 
     @Override public void onEnable() {
         saveDefaultConfig();
+        Bukkit.getPluginManager().registerEvents(this, this);
         ready = new ReadyCheck(this);
         Bukkit.getPluginManager().registerEvents(ready, this);
         table = new CapitulationTable(this);
@@ -59,6 +60,22 @@ public final class BmcWarPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskTimer(this, this::tick, 40L, 20L);
         long minutes = Math.max(1, getConfig().getLong("site.refresh-minutes", 5));
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::fetchSite, 20L, minutes * 60 * 20L);
+    }
+
+    /**
+     * Adds to the server's config.yml every key a newer version brought, with its default value, and keeps everything already set
+     * there: a new version never needs the config deleted.
+     */
+    void upgradeConfig() {
+        var c = getConfig();
+        var defaults = c.getDefaults();
+        if (defaults == null) return;
+        List<String> added = new ArrayList<>();
+        for (String k : defaults.getKeys(true)) if (!defaults.isConfigurationSection(k) && !c.contains(k, true)) added.add(k);
+        if (added.isEmpty()) return;
+        c.options().copyDefaults(true);
+        saveConfig();
+        getLogger().info("config.yml: added the new settings " + added + " with their default values.");
     }
 
     private ReadyCheck ready;
@@ -74,6 +91,7 @@ public final class BmcWarPlugin extends JavaPlugin {
 
     /** Builds the engine from the config. Called on start and on /bmcwar reload. */
     void setup() {
+        upgradeConfig();
         for (WarMap m : maps) if (m.engine != null) m.engine.clear();   // put back the icons of the captures under way before starting over
         var c = getConfig();
         Map<String, Double> seconds = new HashMap<>();
@@ -90,25 +108,10 @@ public final class BmcWarPlugin extends JavaPlugin {
                 Math.max(0, c.getDouble("capture.cooldown-seconds", 0)), Math.max(1, c.getInt("capture.min-attackers", 1)),
                 -1, Map.of(),   // the old underground depth: replaced by the heights that count in each city (capture.height)
                 c.getBoolean("rules.in-play", true), c.getBoolean("rules.encirclement", true), c.getBoolean("rules.require-engagement", true));
-        // the maps: the old single-map keys (site.url, world, dynmap.world, wars) still work when there is no "maps" section
-        List<WarMap> old2 = new ArrayList<>(maps);
-        maps.clear();
-        Path folder = getDataFolder().toPath();
-        ConfigurationSection ms = c.getConfigurationSection("maps");
-        if (ms != null && !ms.getKeys(false).isEmpty()) {
-            for (String name : ms.getKeys(false)) {
-                ConfigurationSection m = ms.getConfigurationSection(name);
-                if (m == null) continue;
-                String world = m.getString("world", name);
-                String url = m.getString("site");
-                if (url == null || url.isBlank()) { getLogger().warning("maps." + name + " has no \"site\" (its territories.json): left out."); continue; }
-                maps.add(new WarMap(name, world, url, m.getString("dynmap-world", world), m.getStringList("wars"), folder.resolve("territories-cache-" + name + ".json")));
-            }
-        }
-        if (maps.isEmpty()) {
-            maps.add(new WarMap("main", c.getString("world", "world"), c.getString("site.url", "https://bmcmc.online/gaia/territories.json"),
-                    c.getString("dynmap.world", "world"), c.getStringList("wars"), folder.resolve("territories-cache.json")));
-        }
+        this.rules = rules;
+        endOnCapitulation = c.getBoolean("engagement.end-on-capitulation", true);
+        endOnObjective = c.getBoolean("engagement.end-on-objective", true);
+        loadWorldsCache();
         heightBelow = Math.max(0, c.getInt("capture.height.below-ground", 10));
         heightAbove = Math.max(0, c.getInt("capture.height.above-buildings", 30));
         heightByCity.clear();
@@ -120,28 +123,168 @@ public final class BmcWarPlugin extends JavaPlugin {
         }
         if (c.isConfigurationSection("capture.underground")) getLogger().warning("capture.underground is no longer used: what counts is now the height in each city (capture.height). Delete plugins/BmcWar/config.yml to get the new section.");
         heightDone.clear();
-        var plugin = Bukkit.getPluginManager().getPlugin("dynmap");
-        if (!(plugin instanceof org.dynmap.DynmapAPI)) getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
-        for (WarMap m : maps) {
-            if (plugin instanceof org.dynmap.DynmapAPI api) {
+        if (!(Bukkit.getPluginManager().getPlugin("dynmap") instanceof org.dynmap.DynmapAPI))
+            getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
+        syncMaps(true);
+    }
+
+    // ----- The maps: found by themselves on the site's worlds.json, with the config's "maps" on top -----
+
+    private Rules rules;
+    private boolean endOnCapitulation = true, endOnObjective = true;
+    /** The site's worlds.json as last read: each world it publishes a territories.json for. */
+    private volatile List<SiteWorld> siteWorlds = List.of();
+    private volatile String siteWorldsError;
+    record SiteWorld(String key, String name, String territories, String world, String dynmapWorld) {}
+    /** What a map is made of; two maps with the same spec are the same map. */
+    record Spec(String name, String world, String url, String dynmapWorld, List<String> wars, String source) {}
+
+    private String worldsUrl() { return getConfig().getString("site.worlds", "").trim(); }
+    private Path worldsCache() { return getDataFolder().toPath().resolve("worlds-cache.json"); }
+
+    private void loadWorldsCache() {
+        if (worldsUrl().isEmpty() || !Files.exists(worldsCache())) return;
+        try { siteWorlds = parseWorlds(Files.readString(worldsCache())); } catch (Exception e) { getLogger().warning("Ignoring the cached worlds list: " + e); }
+    }
+
+    private static List<SiteWorld> parseWorlds(String json) {
+        var root = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+        List<SiteWorld> out = new ArrayList<>();
+        for (var e : root.getAsJsonArray("worlds")) {
+            var o = e.getAsJsonObject();
+            String key = o.get("key").getAsString();
+            java.util.function.Function<String, String> str = k -> o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : null;
+            String world = str.apply("world") != null ? str.apply("world") : key;
+            out.add(new SiteWorld(key, str.apply("name") != null ? str.apply("name") : key, str.apply("territories"), world,
+                    str.apply("dynmapWorld") != null ? str.apply("dynmapWorld") : world));
+        }
+        return out;
+    }
+
+    /** The maps to run: every world on the site's list (unless the config turns it off or changes it), plus the config's own. */
+    List<Spec> specs() {
+        var c = getConfig();
+        ConfigurationSection ms = c.getConfigurationSection("maps");
+        List<Spec> out = new ArrayList<>();
+        java.util.Set<String> done = new java.util.HashSet<>();
+        String index = worldsUrl();
+        if (!index.isEmpty()) for (SiteWorld w : siteWorlds) {
+            // the config's entry for this world: by its key, else one with the same territories.json or the same Minecraft world
+            String own = w.territories() == null ? null : URI.create(index).resolve(w.territories()).toString();
+            String key = null;
+            if (ms != null) for (String k : ms.getKeys(false)) if (k.equalsIgnoreCase(w.key())) key = k;
+            if (key == null && ms != null) for (String k : ms.getKeys(false)) {
+                ConfigurationSection m = ms.getConfigurationSection(k);
+                if (m != null && !done.contains(k.toLowerCase(java.util.Locale.ROOT)) && (own != null && own.equalsIgnoreCase(m.getString("site", "")) || w.world().equalsIgnoreCase(m.getString("world", k)))) { key = k; break; }
+            }
+            ConfigurationSection o = key == null ? null : ms.getConfigurationSection(key);
+            done.add(w.key().toLowerCase(java.util.Locale.ROOT));
+            if (key != null) done.add(key.toLowerCase(java.util.Locale.ROOT));
+            if (o != null && !o.getBoolean("enabled", true)) continue;
+            String url = o != null && o.getString("site", "").length() > 0 ? o.getString("site") : w.territories() == null ? null : URI.create(index).resolve(w.territories()).toString();
+            if (url == null) continue;
+            String world = o != null && o.contains("world") ? o.getString("world") : w.world();
+            out.add(new Spec(key != null ? key : w.key(), world, url, o != null && o.contains("dynmap-world") ? o.getString("dynmap-world") : w.dynmapWorld(),
+                    o != null ? o.getStringList("wars") : List.of(), "site"));
+        }
+        if (ms != null) for (String name : ms.getKeys(false)) {
+            ConfigurationSection m = ms.getConfigurationSection(name);
+            if (m == null || done.contains(name.toLowerCase(java.util.Locale.ROOT)) || !m.getBoolean("enabled", true)) continue;
+            String url = m.getString("site", "");
+            if (url.isBlank()) {
+                if (index.isEmpty() || siteWorldsError == null && !siteWorlds.isEmpty())
+                    getLogger().warning("maps." + name + " has no \"site\" (its territories.json) and the site's worlds list has no world called " + name + ": left out.");
+                continue;
+            }
+            String world = m.getString("world", name);
+            out.add(new Spec(name, world, url, m.getString("dynmap-world", world), m.getStringList("wars"), "config"));
+        }
+        if (out.isEmpty() && index.isEmpty())   // the oldest config: one map, from site.url / world / dynmap.world / wars
+            out.add(new Spec("main", c.getString("world", "world"), c.getString("site.url", "https://bmcmc.online/gaia/territories.json"),
+                    c.getString("dynmap.world", "world"), c.getStringList("wars"), "config"));
+        return out;
+    }
+
+    /**
+     * Puts the maps in line with specs(). all = start every map over (/bmcwar reload); otherwise a map whose spec did not change keeps
+     * going untouched (its captures under way, its engagement), new ones start and the ones gone are put away.
+     */
+    void syncMaps(boolean all) {
+        List<Spec> wanted = specs();
+        List<WarMap> before = new ArrayList<>(maps);
+        List<WarMap> now = new ArrayList<>();
+        var dyn = Bukkit.getPluginManager().getPlugin("dynmap");
+        Path folder = getDataFolder().toPath();
+        for (Spec sp : wanted) {
+            WarMap same = null;
+            for (WarMap o : before) if (o.spec.equals(sp)) same = o;
+            if (same != null && !all) { now.add(same); before.remove(same); continue; }
+            WarMap m = new WarMap(sp, folder.resolve("territories-cache-" + sp.name() + ".json"));
+            if (dyn instanceof org.dynmap.DynmapAPI api) {
                 m.dynmap = new DynmapMarkers(api, m.dynmapWorld, w -> getLogger().warning("[" + m.name + "] " + w));
                 m.markers = m.dynmap;
             } else {
                 m.dynmap = null;
                 m.markers = new MemoryMarkers();
             }
-            m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(c.getBoolean("engagement.end-on-capitulation", true))
-                    .endOnObjective(c.getBoolean("engagement.end-on-objective", true));
+            m.engine = new CaptureEngine(rules, m.markers).endOnCapitulation(endOnCapitulation).endOnObjective(endOnObjective);
             loadBridges(m);
-            for (WarMap o : old2) if (o.url.equals(m.url)) m.site = o.site;   // keep what was downloaded while the new data arrives
+            for (WarMap o : before) if (o.url.equals(m.url) && o.site != null) m.site = o.site;   // keep what was downloaded while the new data arrives
             if (m.site == null && Files.exists(m.cache)) {   // start from the last download while the new one arrives
                 try { m.site = SiteData.parse(Files.readString(m.cache), fallbackRadius()); } catch (Exception e) { getLogger().warning("[" + m.name + "] Ignoring the cached site data: " + e); }
             }
             m.rebuildMarkers();
-            if (Bukkit.getWorld(m.world) == null) getLogger().warning("[" + m.name + "] There is no world called \"" + m.world + "\" on the server (yet): nobody can capture there until it exists.");
+            now.add(m);
         }
-        getLogger().info("War maps: " + String.join(", ", maps.stream().map(m -> m.name + " (world " + m.world + ")").toList()));
+        for (WarMap o : before) if (o.engine != null) o.engine.clear();   // gone, or started over: put back the icons of its captures under way
+        maps.clear();
+        maps.addAll(now);
+        boolean changed = all || !before.isEmpty() || now.stream().anyMatch(m -> m.fetchedAt == 0);
+        if (!changed) return;
+        for (WarMap m : maps)
+            if (worldOf(m) == null) getLogger().info("[" + m.name + "] The world \"" + m.world + "\" is not on this server: that map waits for it (nothing is downloaded for it until then).");
+        getLogger().info("War maps: " + (maps.isEmpty() ? "none yet" : String.join(", ", maps.stream().map(m -> m.name + " (world " + m.world + (worldOf(m) == null ? ", not here" : "") + ")").toList())));
     }
+
+    /** The Minecraft world a map is fought in, if this server has it (its name, whatever its capitals). */
+    static World worldOf(WarMap m) {
+        World w = Bukkit.getWorld(m.world);
+        if (w != null) return w;
+        for (World o : Bukkit.getWorlds()) if (o.getName().equalsIgnoreCase(m.world)) return o;
+        return null;
+    }
+
+    /** A world that loads after the start (Multiverse...) gets its map's data at once. */
+    @org.bukkit.event.EventHandler
+    public void onWorldLoad(org.bukkit.event.world.WorldLoadEvent e) {
+        for (WarMap m : maps) if (m.world.equalsIgnoreCase(e.getWorld().getName()) && m.site == null)
+            Bukkit.getScheduler().runTaskAsynchronously(this, () -> fetch(m));
+    }
+
+    /** The site's worlds.json, read again: a world added or removed there becomes a map here, or stops being one. */
+    private void fetchWorlds() {
+        String url = worldsUrl();
+        if (url.isEmpty()) return;
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode());
+            List<SiteWorld> read = parseWorlds(response.body());
+            siteWorldsError = null;
+            Files.createDirectories(worldsCache().getParent());
+            Files.writeString(worldsCache(), response.body());
+            if (read.equals(siteWorlds)) return;
+            siteWorlds = read;
+            java.util.concurrent.CompletableFuture<Void> done = new java.util.concurrent.CompletableFuture<>();
+            Bukkit.getScheduler().runTask(this, () -> { try { syncMaps(false); } finally { done.complete(null); } });
+            done.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            if (!String.valueOf(e).equals(siteWorldsError)) getLogger().warning("Could not read the site's worlds list from " + url + ": " + e + " (the last one read is kept).");
+            siteWorldsError = String.valueOf(e);
+        }
+    }
+
+    List<SiteWorld> siteWorlds() { return siteWorlds; }
+    String siteWorldsError() { return siteWorldsError; }
 
     List<WarMap> maps() { return maps; }
 
@@ -178,7 +321,7 @@ public final class BmcWarPlugin extends JavaPlugin {
     /** The map whose world the player is in, or null. */
     WarMap mapAt(Player p) {
         String w = p.getWorld().getName();
-        for (WarMap m : maps) if (m.world.equals(w)) return m;
+        for (WarMap m : maps) if (m.world.equalsIgnoreCase(w)) return m;
         return null;
     }
 
@@ -197,10 +340,10 @@ public final class BmcWarPlugin extends JavaPlugin {
     }
 
     SiteData site(SiteData.War war) { WarMap m = mapOf(war); return m == null ? null : m.site; }
-    CaptureEngine engine(SiteData.War war) { WarMap m = mapOf(war); return m == null ? maps.get(0).engine : m.engine; }
-    Markers markers(SiteData.War war) { WarMap m = mapOf(war); return m == null ? maps.get(0).markers : m.markers; }
+    CaptureEngine engine(SiteData.War war) { WarMap m = mapOf(war); return m != null ? m.engine : maps.isEmpty() ? null : maps.get(0).engine; }
+    Markers markers(SiteData.War war) { WarMap m = mapOf(war); return m != null ? m.markers : maps.isEmpty() ? null : maps.get(0).markers; }
     /** The rules (the same on every map). */
-    Rules rules() { return maps.get(0).engine.rules(); }
+    Rules rules() { return rules; }
 
     /** A war's id, with its map's name when another map has a war of the same id ("map:id"). */
     String warId(SiteData.War war) {
@@ -223,7 +366,10 @@ public final class BmcWarPlugin extends JavaPlugin {
     private int fallbackRadius() { return getConfig().getInt("capture.fallback-radius", 40); }
 
     /** Downloads every map's site data (off the game thread) and swaps each in when it reads. */
-    void fetchSite() { for (WarMap m : new ArrayList<>(maps)) fetch(m); }
+    void fetchSite() {
+        fetchWorlds();
+        for (WarMap m : new ArrayList<>(maps)) if (worldOf(m) != null) fetch(m);   // a map whose world is not on this server downloads nothing
+    }
 
     private void fetch(WarMap m) {
         String url = m.url;
@@ -238,9 +384,12 @@ public final class BmcWarPlugin extends JavaPlugin {
             if (parsed.network() == null && getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
                 getLogger().warning("[" + m.name + "] The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
             m.site = parsed;
+            m.fetchedAt = System.currentTimeMillis();
+            m.error = null;
             Bukkit.getScheduler().runTask(this, () -> { forgetHeights(m); m.rebuildMarkers(); });
         } catch (Exception e) {
-            getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);
+            if (!String.valueOf(e).equals(m.error)) getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);
+            m.error = String.valueOf(e);
         }
     }
 
@@ -275,7 +424,7 @@ public final class BmcWarPlugin extends JavaPlugin {
      * in a row does not, so an elytra opened by mistake on a jump does not take anyone out of a capture.
      */
     String excluded(Player p, String world) {
-        if (!p.getWorld().getName().equals(world)) return "not in the war's world";
+        if (!p.getWorld().getName().equalsIgnoreCase(world)) return "not in the war's world";
         if (p.isDead()) return "dead";
         GameMode mode = p.getGameMode();
         if (mode == GameMode.SPECTATOR) return "spectator";
@@ -573,7 +722,7 @@ public final class BmcWarPlugin extends JavaPlugin {
                 Component.text(ended ? "The engagement is over" : e.war().name(), NamedTextColor.GOLD),
                 Title.Times.times(java.time.Duration.ofMillis(400), java.time.Duration.ofSeconds(5), java.time.Duration.ofMillis(800)));
         for (Player p : Bukkit.getOnlinePlayers()) {
-            boolean here = map != null && p.getWorld().getName().equals(map.world);
+            boolean here = map != null && p.getWorld().getName().equalsIgnoreCase(map.world);
             if (here || s != null && sideOf(p, s, e.war()) >= 0) p.showTitle(title);
         }
     }
@@ -591,7 +740,7 @@ public final class BmcWarPlugin extends JavaPlugin {
                 Component.text("Objective taken: the engagement is over", NamedTextColor.GOLD),
                 Title.Times.times(java.time.Duration.ofMillis(400), java.time.Duration.ofSeconds(4), java.time.Duration.ofMillis(800)));
         for (Player p : Bukkit.getOnlinePlayers()) {
-            boolean here = map != null && p.getWorld().getName().equals(map.world);
+            boolean here = map != null && p.getWorld().getName().equalsIgnoreCase(map.world);
             if (here || s != null && sideOf(p, s, e.war()) >= 0) p.showTitle(title);
         }
     }

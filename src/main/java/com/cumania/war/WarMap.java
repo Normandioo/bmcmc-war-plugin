@@ -21,13 +21,19 @@ final class WarMap {
     final String dynmapWorld;
     final List<String> wars;
     final Path cache;
+    /** What it was made from: the site's worlds list or the config. */
+    final BmcWarPlugin.Spec spec;
+    /** When its data was last downloaded (0 = not since the start), and why the last try failed (null = it did not). */
+    volatile long fetchedAt;
+    volatile String error;
     volatile SiteData site;
     Markers markers;
     DynmapMarkers dynmap;
     CaptureEngine engine;
 
-    WarMap(String name, String world, String url, String dynmapWorld, List<String> wars, Path cache) {
-        this.name = name; this.world = world; this.url = url; this.dynmapWorld = dynmapWorld; this.wars = wars; this.cache = cache;
+    WarMap(BmcWarPlugin.Spec spec, Path cache) {
+        this.spec = spec;
+        this.name = spec.name(); this.world = spec.world(); this.url = spec.url(); this.dynmapWorld = spec.dynmapWorld(); this.wars = spec.wars(); this.cache = cache;
     }
 
     /** Whether this war is one of this map's (the same object, or a war of the same id on its current data). */
