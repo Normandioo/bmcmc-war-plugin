@@ -139,7 +139,15 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     /** What a map is made of; two maps with the same spec are the same map. */
     record Spec(String name, String world, String url, String dynmapWorld, List<String> wars, String source) {}
 
-    private String worldsUrl() { return getConfig().getString("site.worlds", "").trim(); }
+    private String worldsUrl() {
+        String url = getConfig().getString("site.worlds", "").trim();
+        if (url.equals("https://bmcmc.online/worlds.json")) {   // 0.17.0's default: the site keeps one list, maps.json (the mod's too)
+            url = "https://bmcmc.online/maps.json";
+            getConfig().set("site.worlds", url);
+            saveConfig();
+        }
+        return url;
+    }
     private Path worldsCache() { return getDataFolder().toPath().resolve("worlds-cache.json"); }
 
     private void loadWorldsCache() {
@@ -150,11 +158,14 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     private static List<SiteWorld> parseWorlds(String json) {
         var root = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
         List<SiteWorld> out = new ArrayList<>();
-        for (var e : root.getAsJsonArray("worlds")) {
+        // maps.json (the site's list, read by the Xaero's mod too): {"maps": [{key, name, territories, dynmapWorld?, world?, ...}]}
+        var list = root.has("maps") ? root.getAsJsonArray("maps") : root.getAsJsonArray("worlds");
+        for (var e : list) {
             var o = e.getAsJsonObject();
             String key = o.get("key").getAsString();
             java.util.function.Function<String, String> str = k -> o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : null;
-            String world = str.apply("world") != null ? str.apply("world") : key;
+            // the Minecraft world: "world", else the dynmap world's name, else (null) this server's main world
+            String world = str.apply("world") != null ? str.apply("world") : str.apply("dynmapWorld");
             out.add(new SiteWorld(key, str.apply("name") != null ? str.apply("name") : key, str.apply("territories"), world,
                     str.apply("dynmapWorld") != null ? str.apply("dynmapWorld") : world));
         }
@@ -175,7 +186,7 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
             if (ms != null) for (String k : ms.getKeys(false)) if (k.equalsIgnoreCase(w.key())) key = k;
             if (key == null && ms != null) for (String k : ms.getKeys(false)) {
                 ConfigurationSection m = ms.getConfigurationSection(k);
-                if (m != null && !done.contains(k.toLowerCase(java.util.Locale.ROOT)) && (own != null && own.equalsIgnoreCase(m.getString("site", "")) || w.world().equalsIgnoreCase(m.getString("world", k)))) { key = k; break; }
+                if (m != null && !done.contains(k.toLowerCase(java.util.Locale.ROOT)) && (own != null && own.equalsIgnoreCase(m.getString("site", "")) || w.world() != null && w.world().equalsIgnoreCase(m.getString("world", k)))) { key = k; break; }
             }
             ConfigurationSection o = key == null ? null : ms.getConfigurationSection(key);
             done.add(w.key().toLowerCase(java.util.Locale.ROOT));
@@ -183,8 +194,9 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
             if (o != null && !o.getBoolean("enabled", true)) continue;
             String url = o != null && o.getString("site", "").length() > 0 ? o.getString("site") : w.territories() == null ? null : URI.create(index).resolve(w.territories()).toString();
             if (url == null) continue;
-            String world = o != null && o.contains("world") ? o.getString("world") : w.world();
-            out.add(new Spec(key != null ? key : w.key(), world, url, o != null && o.contains("dynmap-world") ? o.getString("dynmap-world") : w.dynmapWorld(),
+            String main = Bukkit.getWorlds().isEmpty() ? "world" : Bukkit.getWorlds().get(0).getName();   // a map that names no world is in the main one
+            String world = o != null && o.contains("world") ? o.getString("world") : w.world() != null ? w.world() : main;
+            out.add(new Spec(key != null ? key : w.key(), world, url, o != null && o.contains("dynmap-world") ? o.getString("dynmap-world") : w.dynmapWorld() != null ? w.dynmapWorld() : world,
                     o != null ? o.getStringList("wars") : List.of(), "site"));
         }
         if (ms != null) for (String name : ms.getKeys(false)) {

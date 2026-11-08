@@ -3,14 +3,15 @@
 site:
   # How often the site's data is downloaded again (minutes).
   refresh-minutes: 5
-  # The site's list of worlds. Every world on it becomes a war map by itself, as soon as this server has its Minecraft world:
-  # a new world on the site needs nothing done here, and a world this server does not have downloads nothing.
+  # The site's list of maps (maps.json, the same list the Xaero's mod reads). Every map on it becomes a war map by itself, as soon
+  # as this server has its Minecraft world (its "world", else its "dynmapWorld", else this server's main world): a new map on the
+  # site needs nothing done here, and one whose world this server does not have downloads nothing.
   # "" = no list: only the maps below.
-  worlds: https://bmcmc.online/worlds.json
+  worlds: https://bmcmc.online/maps.json
 
 # Nothing is needed here: the maps come from the site's list (above). Use this only to change one of them, to turn one off, or to
 # add a map the site does not list. /bmcwar maps shows every map and whether its world, its data and its dynmap markers are there.
-#   gaia:                  # the world's key on the site's list (or any name, for a map of your own)
+#   gaia:                  # the map's key in the site's maps.json (or any name, for a map of your own)
 #     world: world         # the Minecraft world on THIS server, when its name is not the site's
 #     dynmap-world: world  # the dynmap world its markers are in, when not the same
 #     wars: []             # which wars to run (their ids); [] = every war marked "live" that has not ended

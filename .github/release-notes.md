@@ -2,8 +2,11 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.17.1
+- The war maps now come from the site's `maps.json`, the one list the Xaero's mod reads too (0.17.0 read a separate `worlds.json`; a config with that address is switched over by itself).
+
 ### New in 0.17.0
-- **Plug and play: the war maps come from the site by themselves.** The plugin reads the site's list of worlds (`site.worlds`, https://bmcmc.online/worlds.json) and starts a war map for every world on it that this server has. A new world on the site needs nothing done on the server; a world this server does not have downloads nothing; a world loaded later (Multiverse) starts at once. The `maps` section of `config.yml` is now only for changes: another Minecraft or dynmap world name, which wars to run, `enabled: false`, or a map the site does not list. Old `maps` entries keep working.
+- **Plug and play: the war maps come from the site by themselves.** The plugin reads the site's list of maps (`site.worlds`, https://bmcmc.online/maps.json, the same list the Xaero's mod reads) and starts a war map for every map on it whose Minecraft world this server has (its `world`, else its `dynmapWorld`, else the server's main world). A new world on the site needs nothing done on the server; a world this server does not have downloads nothing; a world loaded later (Multiverse) starts at once. The `maps` section of `config.yml` is now only for changes: another Minecraft or dynmap world name, which wars to run, `enabled: false`, or a map the site does not list. Old `maps` entries keep working.
 - **No more deleting `config.yml`.** Settings added by a new version are written into the existing `config.yml` with their default values; everything already set stays.
 - **`/bmcwar maps`** (staff): every war map, where it comes from, whether its world is on this server, how many cities and live wars its data has, when it was last updated, and how many of its cities have a dynmap marker.
 
