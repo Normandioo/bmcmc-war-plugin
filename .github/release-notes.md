@@ -2,6 +2,11 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.17.0
+- **Plug and play: the war maps come from the site by themselves.** The plugin reads the site's list of worlds (`site.worlds`, https://bmcmc.online/worlds.json) and starts a war map for every world on it that this server has. A new world on the site needs nothing done on the server; a world this server does not have downloads nothing; a world loaded later (Multiverse) starts at once. The `maps` section of `config.yml` is now only for changes: another Minecraft or dynmap world name, which wars to run, `enabled: false`, or a map the site does not list. Old `maps` entries keep working.
+- **No more deleting `config.yml`.** Settings added by a new version are written into the existing `config.yml` with their default values; everything already set stays.
+- **`/bmcwar maps`** (staff): every war map, where it comes from, whether its world is on this server, how many cities and live wars its data has, when it was last updated, and how many of its cities have a dynmap marker.
+
 ### New in 0.16.0
 - **A bridge opened or closed with `/bmcwar bridge` now shows on dynmap and on the site.** The plugin swaps the bridge's dynmap icon (`BridgeOpenRed` <-> `BridgeClosedRed`, the colour stays), and the site's war map reads it from there within a few seconds. The bridge needs a marker on dynmap with a `Bridge...` or `Strait...` icon, and dynmap needs the `BridgeClosed...` icons; if one is missing, the console says so once. No need to edit `diplomacy.json` any more.
 

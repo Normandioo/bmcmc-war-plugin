@@ -231,7 +231,7 @@ def capture_zones(svg_path, to_block, localities, expected_vb):
 
 
 # ---------------------------------------------------------------------------------------------
-# Connections (5.5.8-10), Warzones (5.5.14-15), Bridges and Straits, as js/network.js reads them
+# Connections (5.5.8-10), Adjacencies (yellow lines), Bridges and Straits, as js/network.js reads them
 # from the political map, for the BmcWar server plugin (In Play, 7.8.1)
 # ---------------------------------------------------------------------------------------------
 NETWORK_SNAP_SHARE = 0.015   # as js/network.js: a line end counts as touching a marker within 1.5% of the map's width
@@ -304,7 +304,7 @@ def stroke_lines(el, tx, ty, inherited):
 
 
 def is_yellow(color):
-    """A Warzone line's colour, as js/network.js isYellowColor."""
+    """An Adjacency line's colour, as js/network.js isYellowColor."""
     c = (color or '').strip().lower()
     named = {'yellow': (255, 255, 0), 'gold': (255, 215, 0)}
     if c in named: r, g, b = named[c]
@@ -319,8 +319,10 @@ def is_yellow(color):
 
 def connection_network(tree, nodes, width):
     """nodes: [{id, kind ('locality' | 'bridge' | 'strait'), open, x, y}] in map units. Each stroked line whose two ends point
-    at two markers Connects them (a yellow one also puts two localities in one Warzone); lines with one end out at sea
-    (a Harbor's link to its tile) or loose ends are left out, as on the site. Returns {"links": {...}, "edges": [...]}."""
+    at two markers Connects them (a yellow one also makes the two Adjacent: while one is In Play, beds may be broken in the
+    other, though it can't be captured for that); lines with one end out at sea (a Harbor's link to its tile) or loose ends
+    are left out, as on the site. Returns {"links": {...}, "edges": [[a, b], ...], "adjacent": [[a, b], ...]}: every line
+    is in "edges", the yellow ones in "adjacent" as well (there are no Warzones any more)."""
     snap = width * NETWORK_SNAP_SHARE
 
     def pointed(p, d):
@@ -342,17 +344,21 @@ def connection_network(tree, nodes, width):
         if not na or not nb or na is nb: continue   # a Harbor's line out to sea, or a loose one
         if na['kind'] != 'locality' and nb['kind'] != 'locality': loose += 1; continue
         key = tuple(sorted((na['id'], nb['id'])))
-        warzone = is_yellow(stroke)
+        adjacent = is_yellow(stroke)
         if key in seen:
-            if warzone: seen[key][2] = 1
+            if adjacent: seen[key][2] = 1
             continue
-        edge = [key[0], key[1], 1 if warzone else 0]
+        edge = [key[0], key[1], 1 if adjacent else 0]
         seen[key] = edge
         edges.append(edge)
     if loose: print(f'  connections: {loose} line(s) between two bridges/straits left out')
-    links = {n['id']: {'kind': n['kind'], 'open': n['open']} for n in nodes if n['kind'] != 'locality'
-             and any(n['id'] in e[:2] for e in edges)}
-    return {'links': links, 'edges': [e if e[2] else e[:2] for e in edges]}
+    links = {n['id']: {'kind': n['kind'], 'open': n['open'], **({'x': n['block'][0], 'z': n['block'][1]} if n.get('block') else {})}
+             for n in nodes if n['kind'] != 'locality' and any(n['id'] in e[:2] for e in edges)}
+    out = {'links': links, 'edges': [e[:2] for e in edges]}
+    localities_ids = {n['id'] for n in nodes if n['kind'] == 'locality'}
+    adjacent = [e[:2] for e in edges if e[2] and e[0] in localities_ids and e[1] in localities_ids]
+    if adjacent: out['adjacent'] = adjacent
+    return out
 
 
 def as_list(value):
@@ -605,6 +611,19 @@ def war_map_states(path):
     return out
 
 
+def war_map_bridges(path):
+    """{"Name(Country)": "Open" / "Closed"} for the Bridges and Straits a war's Strategic Map draws."""
+    try:
+        tree = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return {}
+    out = {}
+    for el, tx, ty in walk(tree, 0.0, 0.0, ('ellipse',)):
+        m = re.fullmatch(r'marker__(.+?)-lp-(.+?)-rp-__(Bridge|Strait)(Open|Closed)?[A-Za-z]*', el.get('id') or '')
+        if m and m.group(4): out[f'{m.group(1)}({m.group(2)})'] = m.group(4)
+    return out
+
+
 def war_block(meta, diplomacy, countries, localities, clock, root=None):
     """The "war" part of territories.json. Everything is stored with absolute times, so the mod works out what is still running."""
     confed = diplomacy.get('confederations') or {}
@@ -703,6 +722,8 @@ def war_block(meta, diplomacy, countries, localities, clock, root=None):
         supply = {str(k): as_list(v) for k, v in (war.get('supplyCapitals') or {}).items() if as_list(v)}
         if supply: out['supplyCapitals'] = supply
         bridges = {str(k): str(v) for k, v in (war.get('bridges') or {}).items() if v is not None}
+        if war.get('map') and root is not None:   # the war's own map says which Bridges and Straits are open; "bridges" in the war's entry wins over it
+            for k, v in war_map_bridges(Path(root) / str(war['map'])).items(): bridges.setdefault(k, v)
         if bridges: out['bridges'] = bridges
         wars.append(out)
 
@@ -757,17 +778,54 @@ def war_block(meta, diplomacy, countries, localities, clock, root=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('world', help='world key in timeline-config.json (e.g. gaia)')
+    ap.add_argument('world', nargs='?', help='world key in timeline-config.json (e.g. gaia); leave out with --all')
+    ap.add_argument('--all', action='store_true', help='every world of timeline-config.json with a "dynmap" entry, then worlds.json')
     ap.add_argument('--root', default='.', help='site folder (default: current)')
     ap.add_argument('--dimension', default='minecraft:overworld')
     ap.add_argument('--refresh-skins', action='store_true', help='download every skin again (default: only missing ones)')
     ap.add_argument('--out', help='output file (default: <world folder>/territories.json)')
     args = ap.parse_args()
-
     root = Path(args.root)
-    cfg = json.loads((root / 'timeline-config.json').read_text(encoding='utf8'))['worlds'][args.world]
+    if not args.all:
+        if not args.world: ap.error('name a world, or use --all')
+        export_world(args, root, args.world)
+        return
+    if args.out: ap.error('--out goes with a single world, not --all')
+    worlds = json.loads((root / 'timeline-config.json').read_text(encoding='utf8'))['worlds']
+    index = []
+    for key, cfg in worlds.items():
+        if not isinstance(cfg, dict) or not cfg.get('dynmap') or not cfg.get('latestFile'): continue
+        print(f'--- {key}')
+        export_world(args, root, key)
+        dyn = cfg['dynmap']
+        index.append({
+            'key': key, 'name': cfg.get('name', key),
+            'territories': (Path(cfg['latestFile']).parent / 'territories.json').as_posix(),
+            # the Minecraft world (folder name) the war is fought in, and the dynmap world its markers are in
+            'world': cfg.get('minecraftWorld') or dyn.get('world') or key,
+            'dynmapWorld': dyn.get('world') or cfg.get('minecraftWorld') or key,
+        })
+    write_worlds_index(root / 'worlds.json', index)
+
+
+def write_worlds_index(target, index):
+    """worlds.json: the worlds whose territories.json this site publishes, for the BmcWar plugin to find them by itself."""
+    out = {'format': 1, 'worlds': index}
+    if target.exists():
+        try:
+            if json.loads(target.read_text(encoding='utf8')) == out:
+                print(f'{target}: unchanged ({len(index)} worlds)')
+                return
+        except ValueError:
+            pass
+    target.write_text(json.dumps(out, indent=1, ensure_ascii=False) + '\n', encoding='utf8')
+    print(f'{target}: {len(index)} worlds ({", ".join(w["key"] for w in index)})')
+
+
+def export_world(args, root, world):
+    cfg = json.loads((root / 'timeline-config.json').read_text(encoding='utf8'))['worlds'][world]
     dyn = cfg.get('dynmap')
-    if not dyn: sys.exit(f'"{args.world}" has no "dynmap" entry (center/size) in timeline-config.json')
+    if not dyn: sys.exit(f'"{world}" has no "dynmap" entry (center/size) in timeline-config.json')
     cx, cz = dyn.get('center', [0, 0]); size = dyn.get('size', 5000)
 
     svg_path = root / cfg['latestFile']
@@ -825,7 +883,8 @@ def main():
         if m and re.fullmatch(r'(Bridge|Strait)(Open|Closed)?(Red|Blue|Green|Contested|Uncontrolled|Neutral)?', m.group(3)):
             net_nodes.append({'id': f'{m.group(1)}({m.group(2)})', 'kind': m.group(3).startswith('Bridge') and 'bridge' or 'strait',
                               'open': 'Closed' not in m.group(3),
-                              'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty})
+                              'x': float(el.get('cx') or 0) + tx, 'y': float(el.get('cy') or 0) + ty,
+                              'block': to_block(float(el.get('cx') or 0) + tx, float(el.get('cy') or 0) + ty)})
             continue
         if not m: continue
         if loc_file:
@@ -850,7 +909,7 @@ def main():
         if capture_path.exists(): zones = capture_zones(capture_path, to_block, localities, vb)
         else: print(f'  capture limits: {capture_path} not found; none exported')
 
-    # Connections between localities, Warzones, Bridges and Straits (js/network.js), for the BmcWar plugin's In Play
+    # Connections between localities, Adjacencies, Bridges and Straits (js/network.js), for the BmcWar plugin's In Play
     network = connection_network(tree, net_nodes, vb[2])
 
     # Players behind the countries' populations: the site's own records and their skins
@@ -874,7 +933,7 @@ def main():
     war = war_block(meta, diplomacy, countries, localities, clock, root)
 
     out = {
-        'format': 1, 'world': args.world, 'dimension': args.dimension,
+        'format': 1, 'world': world, 'dimension': args.dimension,
         'generated': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'countries': countries, 'provinces': provinces, 'localities': localities,
     }
