@@ -14,13 +14,13 @@ repositories {
 dependencies {
     // The server provides these at run time. If the versions are not found, look the current ones up at
     // https://papermc.io/downloads (paper-api) and https://repo.mikeprimm.com/us/dynmap/dynmap-api/ (dynmap-api).
-    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
+    compileOnly 'io.papermc.paper:paper-api:26.+'
     compileOnly 'us.dynmap:dynmap-api:3.7-beta-6'
     compileOnly 'us.dynmap:DynmapCoreAPI:3.7-beta-6'   // org.dynmap.markers lives here
 }
 
 java {
-    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
 }
 
 tasks.processResources {
@@ -31,3 +31,5 @@ tasks.processResources {
 tasks.jar {
     archiveBaseName = 'BmcWar'
 }
+
+tasks.withType(JavaCompile).configureEach { options.release = 21 }   // the jar still runs on Java 21 servers
