@@ -21,6 +21,7 @@ dependencies {
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(25) }
+    disableAutoTargetJvm()   // Paper 26 is built for Java 25; this plugin still targets 21
 }
 
 tasks.processResources {
