@@ -19,6 +19,12 @@ site:
 #     site: https://...    # its territories.json (needed only for a map the site's list does not have)
 maps: {}
 
+# The BMC Atlas client mod: tell it, through the game connection (channel "bmcatlas:sync"), who holds each city of the live wars and
+# when the site's data changed, only when something changes. Players with the mod then stop asking dynmap for the war markers every
+# few seconds and the site every half hour. Players without the mod get nothing. false = the mod asks dynmap and the site itself.
+mod-sync:
+  enabled: true
+
 capture:
   # How long (SECONDS) a side must stay inside a locality's land, with no opponent there, to take it (Laws 7.8.5-6):
   #   Settlement = Small, Medium, Large or Colonial (5.8.4)

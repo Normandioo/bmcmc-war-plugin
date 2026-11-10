@@ -31,6 +31,16 @@ O plugin segue as regras de captura do livro *The Laws of the Game* e lê o fron
 - **Ready check:** quando um Engagement começa, todo jogador com lado na guerra vê um título na tela perguntando se está pronto e responde digitando `ready` ou `not ready` no chat (a resposta não aparece no chat público; a staff é avisada e vê o resumo em `/bmcwar status`). Por padrão o Engagement **só começa quando todos disseram ready** (até lá ninguém captura e o tempo dele não corre); quem sai do servidor deixa de segurar, e a staff pode começar mesmo assim com `/bmcwar engagement go`. `engagement.ready-check` liga/desliga, ajusta os lembretes e `wait-for-all: false` faz o check ser só informativo.
 - **Capitulação** (7.9): `/bmcwar status` mostra o score de cada país (cada país como um único Mainland; Colonial não vale). Quando um país capitula (capital tomada e score acima de 100), todo mundo é avisado no chat e com um título na tela (quem luta na guerra ou está no mapa dela), e o Engagement em andamento acaba (`engagement.end-on-capitulation`, `announce.capitulated`).
 
+## Aviso ao mod BMC Atlas (canal `bmcatlas:sync`)
+
+O plugin avisa o mod BMC Atlas pela própria conexão do jogo, em vez de o mod ficar perguntando ao dynmap e ao site:
+
+- Quando o mod de um jogador abre o canal, o plugin manda um `hello` e o estado atual de cada mapa.
+- A cada segundo, o plugin compara o estado de cada mapa (quem segura cada cidade das guerras ao vivo, as pontes abertas ou fechadas pela staff e a data `generated` do `territories.json` em uso) com o último enviado, e só manda de novo quando algo mudou.
+- Com isso, o mod para de ler os marcadores do dynmap a cada poucos segundos e de baixar o site a cada meia hora: ele só baixa o `territories.json` quando a data `generated` muda.
+- Jogadores sem o mod não recebem nada. `mod-sync.enabled: false` desliga o aviso, e o mod volta a perguntar sozinho.
+- O formato das mensagens está em `src/main/java/com/cumania/war/sync/SyncMessages.java`, e `test/SyncCheck.java` confere as mensagens com os dados reais do site.
+
 ## Comandos
 
 | Comando | O que faz | Permissão |

@@ -52,6 +52,9 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         Bukkit.getPluginManager().registerEvents(ready, this);
         table = new CapitulationTable(this);
         Bukkit.getPluginManager().registerEvents(table, this);
+        sync = new ModSync(this);
+        Bukkit.getPluginManager().registerEvents(sync, this);
+        getServer().getMessenger().registerOutgoingPluginChannel(this, com.cumania.war.sync.SyncMessages.CHANNEL);
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
         if (cmd != null) { cmd.setExecutor(command); cmd.setTabCompleter(command); }
@@ -82,6 +85,8 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     ReadyCheck ready() { return ready; }
     private CapitulationTable table;
     CapitulationTable table() { return table; }
+    /** Tells the BMC Atlas client mod what changed (the "bmcatlas:sync" channel). */
+    private ModSync sync;
 
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();
@@ -598,6 +603,7 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
             tick(map, s, dt);
         }
         if (table != null) table.tick();
+        if (sync != null) sync.tick();
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (!debug.contains(p.getUniqueId())) continue;
             String line = countsLine(p);

@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.18.0
+- **The BMC Atlas mod is told what changed, instead of asking.** Through the game connection (channel `bmcatlas:sync`), the plugin sends the BMC Atlas client mod who holds each city of the live wars and the bridges the staff opened or closed, only when something changes, and which site data the server uses (so the mod downloads `territories.json` only when the site changed). Players with the mod (1.2.4 or newer) then stop asking dynmap for the war markers every few seconds and the site every half hour. Players without the mod get nothing; older mods keep working as before. `mod-sync.enabled: false` turns it off (new key, added to the config by itself).
+
 ### New in 0.17.1
 - The war maps now come from the site's `maps.json`, the one list the Xaero's mod reads too (0.17.0 read a separate `worlds.json`; a config with that address is switched over by itself).
 
