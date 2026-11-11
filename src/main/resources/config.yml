@@ -22,6 +22,13 @@ maps: {}
 # The BMC Atlas client mod: tell it, through the game connection (channel "bmcatlas:sync"), who holds each city of the live wars and
 # when the site's data changed, only when something changes. Players with the mod then stop asking dynmap for the war markers every
 # few seconds and the site every half hour. Players without the mod get nothing. false = the mod asks dynmap and the site itself.
+updates:
+  # Tell the staff (console, and bmcwar.admin players when they join) when a newer BmcWar is out. Read from GitHub on start and
+  # every 6 hours. false = no update checks at all.
+  check: true
+  # Tell a player whose BMC Atlas mod is out of date, with a link to download the new one.
+  warn-old-mod: true
+
 mod-sync:
   enabled: true
 

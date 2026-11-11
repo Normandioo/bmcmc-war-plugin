@@ -67,6 +67,20 @@ public final class SyncCheck {
                 .getAsJsonArray("wars").get(0).getAsJsonObject().getAsJsonObject("cities").size() == 0);
         check("message stays small", text.length() < 32_000);
 
+        // versions (update notices)
+        check("version from a release tag", "1.2.5".equals(com.cumania.war.sync.Versions.versionIn("v1.2.5-build.160")));
+        check("version from a 26.x jar", "1.2.4".equals(com.cumania.war.sync.Versions.versionIn("1.2.4+mc26.x")));
+        check("numbers, not text: 1.2.10 > 1.2.9", com.cumania.war.sync.Versions.newer("1.2.10", "1.2.9"));
+        check("same version is not newer", !com.cumania.war.sync.Versions.newer("0.19.0", "0.19.0"));
+        check("older is not newer", !com.cumania.war.sync.Versions.newer("1.2.4", "1.2.6"));
+        var rel = com.cumania.war.sync.Versions.release("{\"tag_name\":\"v1.2.6-build.170\",\"html_url\":\"https://github.com/x/releases/tag/v1.2.6-build.170\"}");
+        check("GitHub release read", rel != null && rel.version().equals("1.2.6") && rel.page().endsWith("v1.2.6-build.170"));
+        check("unreadable release is null", com.cumania.war.sync.Versions.release("not json") == null);
+        var hello2 = com.cumania.war.sync.Versions.modHello("{\"t\":\"hello\",\"v\":1,\"mod\":\"1.2.6\",\"selfCheck\":true}");
+        check("mod hello read", hello2 != null && hello2.version().equals("1.2.6") && hello2.selfCheck());
+        check("mod hello without selfCheck", !com.cumania.war.sync.Versions.modHello("{\"t\":\"hello\",\"mod\":\"1.2.6\"}").selfCheck());
+        check("other messages are not a mod hello", com.cumania.war.sync.Versions.modHello("{\"t\":\"map\"}") == null);
+
         System.out.println(ok + "/" + (ok + failed) + " ok");
         if (failed > 0) System.exit(1);
     }

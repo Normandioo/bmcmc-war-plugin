@@ -40,6 +40,7 @@ O plugin avisa o mod BMC Atlas pela própria conexão do jogo, em vez de o mod f
 - Com isso, o mod para de ler os marcadores do dynmap a cada poucos segundos e de baixar o site a cada meia hora: ele só baixa o `territories.json` quando a data `generated` muda.
 - Jogadores sem o mod não recebem nada. `mod-sync.enabled: false` desliga o aviso, e o mod volta a perguntar sozinho.
 - O formato das mensagens está em `src/main/java/com/cumania/war/sync/SyncMessages.java`, e `test/SyncCheck.java` confere as mensagens com os dados reais do site.
+- **Versões novas (0.19.0):** o plugin consulta os releases no GitHub ao ligar e a cada 6 horas. Avisa a staff (console e quem tem `bmcwar.admin`, ao entrar) quando sai um BmcWar novo, e avisa o jogador cujo mod BMC Atlas está desatualizado, com o link. O mod 1.2.6 em diante informa a versão no mesmo canal; mod que abre o canal sem informar é 1.2.4 ou 1.2.5. Opções: `updates.check` e `updates.warn-old-mod`.
 
 ## Comandos
 

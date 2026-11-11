@@ -55,6 +55,10 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         sync = new ModSync(this);
         Bukkit.getPluginManager().registerEvents(sync, this);
         getServer().getMessenger().registerOutgoingPluginChannel(this, com.cumania.war.sync.SyncMessages.CHANNEL);
+        updates = new UpdateNotices(this);
+        Bukkit.getPluginManager().registerEvents(updates, this);
+        getServer().getMessenger().registerIncomingPluginChannel(this, com.cumania.war.sync.SyncMessages.CHANNEL, updates);
+        updates.start();
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
         if (cmd != null) { cmd.setExecutor(command); cmd.setTabCompleter(command); }
@@ -87,6 +91,8 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     CapitulationTable table() { return table; }
     /** Tells the BMC Atlas client mod what changed (the "bmcatlas:sync" channel). */
     private ModSync sync;
+    /** New versions of the plugin (for the staff) and of the BMC Atlas mod (for players whose mod is old). */
+    private UpdateNotices updates;
 
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();

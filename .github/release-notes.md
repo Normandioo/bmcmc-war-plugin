@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.19.0
+- **New versions are announced.** The plugin reads the latest releases from GitHub when it starts and every 6 hours. When a newer BmcWar is out, the console says so and players with `bmcwar.admin` are told when they join, with a link to download it.
+- **Players with an old BMC Atlas mod are told to update**, with a link. The mod (1.2.6 and newer) says its version on the `bmcatlas:sync` channel; a mod that opens the channel but says nothing is 1.2.4 or 1.2.5. A mod that already tells the player about updates itself is left alone, and players without the mod (or with one older than 1.2.4) get nothing. `updates.check: false` turns all of it off, `updates.warn-old-mod: false` only the players' warning (new keys, added to the config by themselves).
+
 ### New in 0.18.0
 - **The BMC Atlas mod is told what changed, instead of asking.** Through the game connection (channel `bmcatlas:sync`), the plugin sends the BMC Atlas client mod who holds each city of the live wars and the bridges the staff opened or closed, only when something changes, and which site data the server uses (so the mod downloads `territories.json` only when the site changed). Players with the mod (1.2.4 or newer) then stop asking dynmap for the war markers every few seconds and the site every half hour. Players without the mod get nothing; older mods keep working as before. `mod-sync.enabled: false` turns it off (new key, added to the config by itself).
 
