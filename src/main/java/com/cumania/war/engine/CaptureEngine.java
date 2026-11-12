@@ -20,11 +20,9 @@ import java.util.Set;
  * No Minecraft classes in here: the plugin feeds it the players' positions once a second.
  */
 public final class CaptureEngine {
-    /** depth = blocks below the natural ground (0 on the surface, in a building or under water). */
     /** y = the block height of the player's feet (Integer.MIN_VALUE = unknown: every height counts). */
-    public record Present(String player, int side, double x, double z, int depth, int y) {
-        public Present(String player, int side, double x, double z, int depth) { this(player, side, x, z, depth, Integer.MIN_VALUE); }
-        public Present(String player, int side, double x, double z) { this(player, side, x, z, 0); }
+    public record Present(String player, int side, double x, double z, int y) {
+        public Present(String player, int side, double x, double z) { this(player, side, x, z, Integer.MIN_VALUE); }
     }
 
     public enum Type { START, CONTESTED, CLEARED, ABORTED, CAPTURED, ENGAGEMENT_END, CAPITULATED, OBJECTIVE_TAKEN }
@@ -310,7 +308,6 @@ public final class CaptureEngine {
             if (p.side() < 0 || p.side() >= sides) continue;
             SiteData.City city = site.cityAt(p.x(), p.z());   // a place is in one city's land
             if (city == null) continue;
-            if (rules.tooDeep(city, p.depth())) continue;    // too far underground for this city: neither attacker nor resistance
             if (outOfHeight(city, p.y())) continue;           // below the city's ground or far above it (7.8.4): neither either
             WarGraph.Unit u = g.unitOf(city);
             if (blocked(g, u, eng) != null) continue;        // outside the war, not In Play, or not fought over now
@@ -464,14 +461,28 @@ public final class CaptureEngine {
      * targets of a Raid going on: otherwise they would stay as they are in dynmap and the next start would read them as a moderator's call.
      */
     public void clear() {
-        for (Map<String, Progress> mine : active.values()) for (Progress pr : mine.values()) if (pr.contested && pr.shown) restore(pr);
-        active.clear();
+        releaseCaptures();
         for (Map.Entry<String, Map<SiteData.City, Integer>> raid : raidRestore.entrySet()) {
             SiteData.War war = warsSeen.get(raid.getKey());
             if (war != null) for (Map.Entry<SiteData.City, Integer> r : raid.getValue().entrySet()) markers.write(war, r.getKey(), r.getValue());
         }
         raidRestore.clear();
         engagements.clear();
+    }
+
+    /** Puts back the icons of the captures under way and drops them; the Engagement, a Raid's targets and the clocks stay (reload). */
+    public void releaseCaptures() {
+        for (Map<String, Progress> mine : active.values()) for (Progress pr : mine.values()) if (pr.contested && pr.shown) restore(pr);
+        active.clear();
+    }
+
+    /** The engine that replaces another for the same map (reload) goes on with its Engagements, Raids, clocks and capture history. */
+    public void inherit(CaptureEngine old) {
+        engagements.putAll(old.engagements);
+        clocks.putAll(old.clocks);
+        raidRestore.putAll(old.raidRestore);
+        warsSeen.putAll(old.warsSeen);
+        history.putAll(old.history);
     }
 
     private final Map<String, SiteData.War> warsSeen = new HashMap<>();

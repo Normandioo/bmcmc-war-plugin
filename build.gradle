@@ -28,6 +28,20 @@ tasks.processResources {
     filesMatching('plugin.yml') { expand(version: project.version) }
 }
 
+// The checks in test/ play the rules against the sample territories.json files. "gradlew check" (so the CI build too) runs them.
+sourceSets { checks { java.srcDir 'test' } }
+sourceSets.checks.compileClasspath = sourceSets.main.output + sourceSets.main.compileClasspath
+sourceSets.checks.runtimeClasspath = sourceSets.checks.output + sourceSets.main.output + sourceSets.main.compileClasspath
+[EngineCheck: 'territories-sample', WarCheck: 'territories-network-sample', SyncCheck: 'territories-sample',
+ DynmapCheck: 'territories-sample', ReloadCheck: 'territories-network-sample'].each { checkName, sample ->
+    def run = tasks.register("run${checkName}", JavaExec) {
+        classpath = sourceSets.checks.runtimeClasspath
+        mainClass = checkName
+        args "docs/${sample}.json"
+    }
+    tasks.named('check') { dependsOn run }
+}
+
 tasks.jar {
     archiveBaseName = 'BmcWar'
 }

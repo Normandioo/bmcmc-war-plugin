@@ -60,7 +60,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
                 if (!admin(sender)) return true;
                 plugin.reloadConfig();
                 plugin.setup();
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, plugin::fetchSite);
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, plugin.source()::fetchSite);
                 say(sender, "Reloaded. The site's data is being downloaded again.", NamedTextColor.GREEN);
             }
             default -> say(sender, USAGE, NamedTextColor.GRAY);
@@ -103,7 +103,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             }
             for (Capitulation.Score c : Capitulation.of(site, war, g)) {
                 if (c.score() <= 0 && !c.capitalTaken()) continue;
-                say(sender, "  " + c.nation() + ": capitulation score " + Math.round(c.score()) + "/100, " + c.taken() + " of " + c.total() + " settlements taken, capital "
+                say(sender, "  " + c.nation() + ": capitulation score " + Math.min(100, Math.round(c.score())) + "/100, " + c.taken() + " of " + c.total() + " settlements taken, capital "
                         + (c.capital() == null ? "unknown" : c.capitalTaken() ? "TAKEN" : "held") + (c.capitulated() ? " - CAPITULATED" : ""), c.capitulated() ? NamedTextColor.RED : NamedTextColor.GRAY);
             }
         }
@@ -433,8 +433,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
 
     /** /bmcwar maps: every war map, where it comes from, and whether its world, its data and its dynmap markers are there. */
     private void maps(CommandSender sender) {
-        var list = plugin.siteWorlds();
-        String err = plugin.siteWorldsError();
+        var list = plugin.source().siteWorlds();
+        String err = plugin.source().siteWorldsError();
         say(sender, "War maps" + (list.isEmpty() && err == null ? "" : " (the site lists " + list.size() + " world" + (list.size() == 1 ? "" : "s")
                 + (err == null ? ")" : "; its last reading failed: " + err + ")")), NamedTextColor.GOLD);
         if (plugin.maps().isEmpty()) say(sender, "  None yet: the site's worlds list has not been read.", NamedTextColor.YELLOW);

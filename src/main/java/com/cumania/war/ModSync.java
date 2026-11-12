@@ -41,7 +41,7 @@ final class ModSync implements Listener {
         Player p = e.getPlayer();
         send(p, SyncMessages.hello());
         for (WarMap m : plugin.maps()) {
-            String msg = sent.containsKey(m.name) ? sent.get(m.name) : build(m);
+            String msg = build(m);
             if (msg != null) send(p, msg);
         }
     }
@@ -51,6 +51,7 @@ final class ModSync implements Listener {
         if (!enabled()) return;
         List<Player> listening = Bukkit.getOnlinePlayers().stream()
                 .filter(p -> p.getListeningPluginChannels().contains(SyncMessages.CHANNEL)).map(p -> (Player) p).toList();
+        if (listening.isEmpty()) return;   // nobody to tell: the state is built when someone's mod opens the channel
         for (WarMap m : plugin.maps()) {
             String msg = build(m);
             if (msg == null || msg.equals(sent.get(m.name))) continue;

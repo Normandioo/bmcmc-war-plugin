@@ -17,7 +17,6 @@ import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -38,7 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class UpdateNotices implements Listener, PluginMessageListener {
     private final BmcWarPlugin plugin;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build();
     /** What each player's mod said about itself (only mods 1.2.6 and newer say it). */
     private final Map<UUID, Versions.ModHello> mods = new ConcurrentHashMap<>();
     private volatile Versions.Release latestPlugin, latestMod;
@@ -72,7 +70,7 @@ final class UpdateNotices implements Listener, PluginMessageListener {
 
     private Versions.Release latest(String url) {
         try {
-            HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15))
+            HttpResponse<String> r = plugin.source().http().send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15))
                     .header("User-Agent", "bmc-war").header("Accept", "application/vnd.github+json").GET().build(), HttpResponse.BodyHandlers.ofString());
             return r.statusCode() == 200 ? Versions.release(r.body()) : null;
         } catch (Exception e) {
