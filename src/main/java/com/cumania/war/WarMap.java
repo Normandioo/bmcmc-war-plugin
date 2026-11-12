@@ -22,7 +22,7 @@ final class WarMap {
     final List<String> wars;
     final Path cache;
     /** What it was made from: the site's worlds list or the config. */
-    final BmcWarPlugin.Spec spec;
+    final MapSource.Spec spec;
     /** When its data was last downloaded (0 = not since the start), and why the last try failed (null = it did not). */
     volatile long fetchedAt;
     volatile String error;
@@ -31,7 +31,7 @@ final class WarMap {
     DynmapMarkers dynmap;
     CaptureEngine engine;
 
-    WarMap(BmcWarPlugin.Spec spec, Path cache) {
+    WarMap(MapSource.Spec spec, Path cache) {
         this.spec = spec;
         this.name = spec.name(); this.world = spec.world(); this.url = spec.url(); this.dynmapWorld = spec.dynmapWorld(); this.wars = spec.wars(); this.cache = cache;
     }

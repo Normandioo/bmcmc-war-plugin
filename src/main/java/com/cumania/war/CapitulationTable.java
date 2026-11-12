@@ -58,12 +58,13 @@ final class CapitulationTable implements Listener {
         copyTeams(original, own);
         shown.put(p.getUniqueId(), new Shown(own, original));
         p.setScoreboard(own);
-        update(p);
+        update(p, new HashMap<>());
         return true;
     }
 
     /** Every second: the teams copied again, and the table brought up to date. */
     void tick() {
+        Map<SiteData.War, View> views = new HashMap<>();   // worked out once per war, not once per player
         for (UUID id : new ArrayList<>(shown.keySet())) {
             Player p = Bukkit.getPlayer(id);
             Shown s = shown.get(id);
@@ -74,7 +75,7 @@ final class CapitulationTable implements Listener {
                 continue;
             }
             copyTeams(s.original(), s.own());
-            update(p);
+            update(p, views);
         }
     }
 
@@ -94,50 +95,51 @@ final class CapitulationTable implements Listener {
 
     private static final String OBJECTIVE = "bmcwar_capitulation";
 
-    private void update(Player p) {
+    /** One line of the table. colour: -1 grey, -2 yellow (the engagement line), otherwise the index of the side whose colour it takes. */
+    private record Row(String text, int score, int colour, String suffix) {}
+
+    /** What the table says for one war (null = no engagement going on); worked out once a second and shared by every player who sees it. */
+    private record View(SiteData.War war, Component title, List<Row> rows) {}
+
+    private View view(SiteData.War war) {
+        SiteData site = war == null ? null : plugin.site(war);
+        if (site == null) return new View(null, Component.text("Capitulation", NamedTextColor.GOLD, TextDecoration.BOLD), List.of(new Row("No engagement", 0, -1, "")));
+        List<Row> rows = new ArrayList<>();
+        WarGraph g = plugin.engine(war).graph(site, war);
+        List<Capitulation.Score> scores = new ArrayList<>(Capitulation.of(site, war, g));
+        scores.sort(Comparator.comparingDouble(Capitulation.Score::score).reversed().thenComparing(Capitulation.Score::nation));
+        for (Capitulation.Score c : scores.subList(0, Math.min(13, scores.size()))) {
+            int pct = (int) Math.min(100, Math.round(c.score()));
+            String suffix = c.capitulated() ? " CAPITULATED" : c.capitalTaken() ? " capital taken" : "";
+            rows.add(new Row(c.nation(), pct, c.side(), suffix));
+        }
+        Engagement e = plugin.engine(war).engagement(war);
+        if (e != null) rows.add(new Row(e.kind().label + (e.waiting() ? " (waiting)" : e.paused() ? " (paused)" : Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.left(plugin.engine(war).clock(war)))), -1, -2, ""));
+        return new View(war, Component.text(war.name(), NamedTextColor.GOLD, TextDecoration.BOLD), rows);
+    }
+
+    private void update(Player p, Map<SiteData.War, View> views) {
         Shown s = shown.get(p.getUniqueId());
         if (s == null) return;
         Scoreboard board = s.own();
         Objective old = board.getObjective(DisplaySlot.SIDEBAR);
-        SiteData.War war = pickWar(p);
-        SiteData site = war == null ? null : plugin.site(war);
-        if (site == null) war = null;
-
-        List<String[]> rows = new ArrayList<>();   // entry text, score, colour index (-1 grey, side otherwise), suffix
-        Component title;
-        if (war == null) {
-            title = Component.text("Capitulation", NamedTextColor.GOLD, TextDecoration.BOLD);
-            rows.add(new String[]{"No engagement", "0", "-1", ""});
-        } else {
-            title = Component.text(war.name(), NamedTextColor.GOLD, TextDecoration.BOLD);
-            WarGraph g = plugin.engine(war).graph(site, war);
-            List<Capitulation.Score> scores = new ArrayList<>(Capitulation.of(site, war, g));
-            scores.sort(Comparator.comparingDouble(Capitulation.Score::score).reversed().thenComparing(Capitulation.Score::nation));
-            for (Capitulation.Score c : scores.subList(0, Math.min(13, scores.size()))) {
-                int pct = (int) Math.min(100, Math.round(c.score()));
-                String suffix = c.capitulated() ? " CAPITULATED" : c.capitalTaken() ? " capital taken" : "";
-                rows.add(new String[]{c.nation(), String.valueOf(pct), String.valueOf(c.side()), suffix});
-            }
-            Engagement e = plugin.engine(war).engagement(war);
-            if (e != null) rows.add(new String[]{e.kind().label + (e.waiting() ? " (waiting)" : e.paused() ? " (paused)" : Double.isInfinite(e.endsAt()) ? "" : " " + BmcWarPlugin.clock(e.left(plugin.engine(war).clock(war)))), "-1", "-2", ""});
-        }
+        View v = views.computeIfAbsent(pickWar(p), this::view);
 
         // Rebuilt each second on a fresh objective, then swapped in, so the sidebar does not flicker or keep stale rows
         String name = old != null && old.getName().equals(OBJECTIVE) ? OBJECTIVE + "2" : OBJECTIVE;
         Objective stale = board.getObjective(name);
         if (stale != null) stale.unregister();
-        Objective obj = board.registerNewObjective(name, Criteria.DUMMY, title);
+        Objective obj = board.registerNewObjective(name, Criteria.DUMMY, v.title());
         Set<String> used = new HashSet<>();
-        for (String[] r : rows) {
-            String entry = r[0];
+        for (Row r : v.rows()) {
+            String entry = r.text();
             while (!used.add(entry)) entry += " ";
             Score score = obj.getScore(entry);
-            score.setScore(Integer.parseInt(r[1]));
-            int colour = Integer.parseInt(r[2]);
-            NamedTextColor nameColour = colour == -2 ? NamedTextColor.YELLOW : colour < 0 ? NamedTextColor.GRAY : war == null ? NamedTextColor.WHITE : plainColour(plugin.sideColor(war, colour));
-            score.customName(Component.text(r[0], nameColour).append(Component.text(r[3], NamedTextColor.RED)));
-            score.numberFormat(colour == -2 || colour == -1 && war == null ? NumberFormat.blank()
-                    : NumberFormat.fixed(Component.text(r[1] + "%", Integer.parseInt(r[1]) > 100 || r[3].contains("CAPITULATED") ? NamedTextColor.RED : NamedTextColor.WHITE)));
+            score.setScore(r.score());
+            NamedTextColor nameColour = r.colour() == -2 ? NamedTextColor.YELLOW : r.colour() < 0 ? NamedTextColor.GRAY : plainColour(plugin.sideColor(v.war(), r.colour()));
+            score.customName(Component.text(r.text(), nameColour).append(Component.text(r.suffix(), NamedTextColor.RED)));
+            score.numberFormat(r.colour() == -2 || r.colour() == -1 && v.war() == null ? NumberFormat.blank()
+                    : NumberFormat.fixed(Component.text(r.score() + "%", r.suffix().contains("CAPITULATED") ? NamedTextColor.RED : NamedTextColor.WHITE)));
         }
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
         if (old != null && old.getName().startsWith(OBJECTIVE)) old.unregister();

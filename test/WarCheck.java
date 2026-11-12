@@ -20,7 +20,7 @@ public class WarCheck {
     };
 
     static Rules rules(boolean inPlay, boolean engagement) {
-        return new Rules(Map.of(), 0, 1, false, 0, 0, 1, -1, Map.of(), inPlay, true, engagement);
+        return new Rules(Map.of(), 0, 1, false, 0, 0, 1, inPlay, true, engagement);
     }
 
     static List<CaptureEngine.Event> run(CaptureEngine eng, SiteData site, SiteData.War war, List<CaptureEngine.Present> who, int seconds) {
@@ -210,7 +210,7 @@ public class WarCheck {
 
         // 11. resistance resets the clock (7.8.5: 15 s of no enemy presence)
         icons.clear();
-        eng = new CaptureEngine(new Rules(Map.of(), 0, 1, true, 0, 0, 1, -1, Map.of(), false, true, false), MARKERS);
+        eng = new CaptureEngine(new Rules(Map.of(), 0, 1, true, 0, 0, 1, false, true, false), MARKERS);
         SiteData.City sfort = site.city("sakurajiin(greneshire)");   // a capital that is not a Settlement: a Fort, 15 s
         int fowner = site.sideOfCity(war, sfort), fenemy = 1 - fowner;
         run(eng, site, war, List.of(at(sfort, fenemy)), 12);
@@ -221,7 +221,7 @@ public class WarCheck {
         check(captured(ev, sfort), "15 s with no enemy inside do");
 
         // 12. with the config's times (Settlement / Fort / Locality), a capital drawn as a Locality is still a Fort: 15 s, not 0
-        Rules cfg = new Rules(Map.of("Settlement", 30.0, "Fort", 15.0, "Locality", 0.0), 0, 1, true, 0, 0, 1, -1, Map.of(), true, true, true);
+        Rules cfg = new Rules(Map.of("Settlement", 30.0, "Fort", 15.0, "Locality", 0.0), 0, 1, true, 0, 0, 1, true, true, true);
         check(cfg.secondsFor(site.city("sakurajiin(greneshire)")) == 15, "a LocalityCapital with the config's times: 15 s (" + cfg.secondsFor(site.city("sakurajiin(greneshire)")) + ")");
         check(cfg.secondsFor(cubatao) == 0 && cfg.secondsFor(itapecuru) == 30, "a plain Locality still 0 s, a Small capital 30 s");
 
@@ -248,11 +248,11 @@ public class WarCheck {
         icons.clear();
         eng = new CaptureEngine(rules(false, false), MARKERS);
         eng.setHeightRange(cubatao.key(), 55, 120);
-        ev = run(eng, site, war, List.of(new CaptureEngine.Present("deep", 0, cubatao.x(), cubatao.z(), 0, 40)), 2);
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("deep", 0, cubatao.x(), cubatao.z(), 40)), 2);
         check(ev.isEmpty() && !icons.containsKey(cubatao.key()), "at Y 40, under Cubatao's ground (from Y 55): nothing is captured");
-        ev = run(eng, site, war, List.of(new CaptureEngine.Present("sky", 0, cubatao.x(), cubatao.z(), 0, 200)), 2);
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("sky", 0, cubatao.x(), cubatao.z(), 200)), 2);
         check(ev.isEmpty(), "at Y 200, far above it (up to Y 120): nothing either");
-        ev = run(eng, site, war, List.of(new CaptureEngine.Present("ok", 0, cubatao.x(), cubatao.z(), 0, 70)), 1);
+        ev = run(eng, site, war, List.of(new CaptureEngine.Present("ok", 0, cubatao.x(), cubatao.z(), 70)), 1);
         check(captured(ev, cubatao), "at Y 70 it is taken");
         check(!eng.outOfHeight(itapecuru, 5), "a city with no range worked out yet: every height counts");
 

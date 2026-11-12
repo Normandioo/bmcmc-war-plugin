@@ -198,21 +198,7 @@ public class EngineCheck {
                 small.country() + " (vassal of " + overlord + ") fights for the defenders through its overlord");
         check(vs.sideOfNation(vw, vs.countryOfTag(small.country())) == 1, "and a player tagged " + small.country() + " is a defender");
 
-        // 15. too deep underground: neither attacker nor resistance, unless the city allows that depth
-        Rules deep = new Rules(Map.of("Small", 30.0), 0, 1, false, 0, 0, 1, 10, Map.of());
-        icons.clear(); eng = new CaptureEngine(deep, MARKERS);
-        var mole = List.of(new CaptureEngine.Present("a", 0, small.x(), small.z(), 25));
-        all = new ArrayList<>(); for (int t = 0; t < 60; t++) all.addAll(eng.tick(site, war, mole, 1));
-        check(all.isEmpty(), "an attacker 25 blocks underground (limit 10) captures nothing");
-        var shallow = List.of(new CaptureEngine.Present("a", 0, small.x(), small.z(), 5), new CaptureEngine.Present("d", 1, small.x(), small.z(), 25));
-        all = new ArrayList<>(); for (int t = 0; t < 31; t++) all.addAll(eng.tick(site, war, shallow, 1));
-        check(all.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPTURED), "a defender 25 blocks down is no resistance to an attacker in a basement (5)");
-        Rules bunker = new Rules(Map.of("Small", 30.0), 0, 1, false, 0, 0, 1, 10, Map.of(small.key(), 40));
-        icons.clear(); eng = new CaptureEngine(bunker, MARKERS);
-        all = new ArrayList<>(); for (int t = 0; t < 31; t++) all.addAll(eng.tick(site, war, mole, 1));
-        check(all.stream().anyMatch(e -> e.type() == CaptureEngine.Type.CAPTURED), "where the city allows 40 blocks, 25 underground counts");
-
-        // 16. reset: captures under way are dropped
+        // 15. reset: captures under way are dropped
         icons.clear(); eng = new CaptureEngine(now, MARKERS);
         eng.tick(site, war, atk, 1);
         check(eng.statusOf(war, small) != null, "a capture is under way");
