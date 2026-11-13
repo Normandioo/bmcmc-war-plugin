@@ -2,6 +2,11 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.21.0
+- **News in the BMC Atlas mod, with pictures.** The plugin sends the BMC Atlas client mod (1.8.0 and newer) the latest news when the player joins (`mod-sync.news`, 20) and each new one as it comes out. The mod pops new ones up in the top corner of the screen and lists them in its map's News panel, where a click opens the whole news with its picture.
+- **Pictures in the Staff's posts.** The site's Discord bot takes a PNG with `/news post image:`; the plugin turns it into a full address for the mod (the chat and the `/news` menu stay text only).
+- **Breaking News and Staff notice.** A post is Breaking News (news of the world) unless the bot marked it as a Staff notice (`/news post category:`). A new kind `breaking` for `news.announce`; a config that announces `post` announces Breaking News too.
+
 ### New in 0.20.1
 - **The news resource pack has a public address.** The pack is in the repository: set `resource-pack=https://raw.githubusercontent.com/Normandioo/bmcmc-war-plugin/main/pack/bmcnews-pack.zip` and `resource-pack-sha1=acfc56d37d948c813432a28a806aba18068b78df` in `server.properties` (the sha1 changes whenever the pack is rebuilt with `python tools/build_pack.py`; the notes of the release that changes it say so).
 - **A site that answers with something huge can no longer fill the server's memory:** downloads are read as a stream and refused above 16 MB. A zero-width text cut in `News.chunks` can no longer loop forever.
