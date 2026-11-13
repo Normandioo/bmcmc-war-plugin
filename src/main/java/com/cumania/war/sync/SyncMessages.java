@@ -22,6 +22,12 @@ import java.util.function.Function;
  *       war colour, the side that holds it (0, 1, 2) or -2 (contested) / -3 (uncontrolled); a city that is not listed is held by its
  *       own country, exactly like an icon with no war colour. "bridges" are the bridges and straits the staff opened or closed.
  *
+ *   {"t":"news","v":1,"fresh":true,"news":{"id":12,"map":"gaia","type":"post","title":"...","date":"March 3rd, 868 AES","time":1763000000000,
+ *    "details":["..."],"notes":"...","image":"https://bmcmc.online/gaia/news/2026-11-13-Siege.png"}}
+ *       One news (diplomatic or a Staff post). When the mod opens the channel it gets the latest ones, oldest first, with fresh false (to
+ *       list); a news that comes out while the player is on comes with fresh true when the chat tells it too (to pop up). notes and image
+ *       may be missing; id grows with each news of this server.
+ *
  * No Bukkit classes here, so the messages can be checked without a server (test/SyncCheck.java).
  */
 public final class SyncMessages {
@@ -34,6 +40,28 @@ public final class SyncMessages {
         JsonObject o = new JsonObject();
         o.addProperty("t", "hello");
         o.addProperty("v", VERSION);
+        return o.toString();
+    }
+
+    /** One news; date = the world's date it came out (already written out, e.g. "March 3rd, 868 AES"). */
+    public static String news(com.cumania.war.news.News n, String date, boolean fresh) {
+        JsonObject o = new JsonObject();
+        o.addProperty("t", "news");
+        o.addProperty("v", VERSION);
+        o.addProperty("fresh", fresh);
+        JsonObject j = new JsonObject();
+        j.addProperty("id", n.id());
+        j.addProperty("map", n.map());
+        j.addProperty("type", n.type().key());
+        j.addProperty("title", n.title());
+        j.addProperty("date", date);
+        j.addProperty("time", n.time());
+        com.google.gson.JsonArray details = new com.google.gson.JsonArray();
+        if (n.details() != null) n.details().forEach(details::add);
+        j.add("details", details);
+        if (n.notes() != null) j.addProperty("notes", n.notes());
+        if (n.image() != null) j.addProperty("image", n.image());
+        o.add("news", j);
         return o.toString();
     }
 

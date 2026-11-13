@@ -82,7 +82,7 @@ final class NewsMenu implements Listener {
 
     static String icon(News.Type type) {
         return switch (type) {
-            case WAR -> "war"; case PEACE -> "peace"; case POST -> "post"; case ALLIANCE -> "alliance"; case ALLIANCE_JOIN -> "alliance_join";
+            case WAR -> "war"; case PEACE -> "peace"; case POST, BREAKING -> "post"; case ALLIANCE -> "alliance"; case ALLIANCE_JOIN -> "alliance_join";
             case ALLIANCE_LEAVE -> "alliance_leave"; case ALLIANCE_END -> "alliance_end"; case TRUCE -> "truce"; case NAP -> "nap";
             case ULTIMATUM -> "ultimatum"; case VASSAL -> "vassal"; case INDEPENDENCE -> "independence";
         };

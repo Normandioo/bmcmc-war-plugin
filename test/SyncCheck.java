@@ -67,6 +67,17 @@ public final class SyncCheck {
                 .getAsJsonArray("wars").get(0).getAsJsonObject().getAsJsonObject("cities").size() == 0);
         check("message stays small", text.length() < 32_000);
 
+        // news, for the mod's news panel
+        com.cumania.war.news.News post = new com.cumania.war.news.News(7, "gaia", com.cumania.war.news.News.Type.POST, "Siege", List.of("a", "b"), "Smoke.", 1000, "https://x/p.png");
+        JsonObject nm = JsonParser.parseString(SyncMessages.news(post, "March 3rd, 868 AES", true)).getAsJsonObject();
+        JsonObject nj = nm.getAsJsonObject("news");
+        check("news message", nm.get("t").getAsString().equals("news") && nm.get("fresh").getAsBoolean() && nj.get("id").getAsLong() == 7
+                && nj.get("type").getAsString().equals("post") && nj.get("date").getAsString().equals("March 3rd, 868 AES")
+                && nj.get("image").getAsString().equals("https://x/p.png") && nj.getAsJsonArray("details").size() == 2 && nj.get("notes").getAsString().equals("Smoke."));
+        com.cumania.war.news.News joined = new com.cumania.war.news.News(8, "gaia", com.cumania.war.news.News.Type.ALLIANCE_JOIN, "W", List.of(), null, 1000, null);
+        JsonObject wj = JsonParser.parseString(SyncMessages.news(joined, "d", false)).getAsJsonObject().getAsJsonObject("news");
+        check("news without notes or picture leaves them out", !wj.has("notes") && !wj.has("image") && wj.get("type").getAsString().equals("alliance-join"));
+
         // versions (update notices)
         check("version from a release tag", "1.2.5".equals(com.cumania.war.sync.Versions.versionIn("v1.2.5-build.160")));
         check("version from a 26.x jar", "1.2.4".equals(com.cumania.war.sync.Versions.versionIn("1.2.4+mc26.x")));

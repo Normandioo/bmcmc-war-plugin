@@ -195,7 +195,11 @@ public final class NewsDiff {
     }
 
     private static News news(News.Type type, String title, List<String> details, String notes) {
-        return new News(0, null, type, title, List.copyOf(details), notes == null || notes.isBlank() ? null : notes.strip(), 0);
+        return news(type, title, details, notes, null);
+    }
+
+    private static News news(News.Type type, String title, List<String> details, String notes, String image) {
+        return new News(0, null, type, title, List.copyOf(details), notes == null || notes.isBlank() ? null : notes.strip(), 0, image);
     }
 
     private static TerritoryFile.WarInfo war(TerritoryFile f, String id) {
@@ -206,8 +210,11 @@ public final class NewsDiff {
 
     // ----- The Staff's posts: the map's news.json (/news post of the site's Discord bot), next to its territories.json -----
 
-    /** A news the Staff posted; posted = ISO UTC. */
-    public static final class Post { public String id, title, text, posted; }
+    /**
+     * A news the Staff posted; posted = ISO UTC; image = its picture's path in the site (gaia/news/<id>.png), or null;
+     * kind = "staff" for a Staff notice (a word from the Staff), anything else (or none) for Breaking News (news of the world).
+     */
+    public static final class Post { public String id, title, text, posted, image, kind; }
 
     /** What news.json holds. */
     private static final class PostsFile { List<Post> news; }
@@ -225,11 +232,25 @@ public final class NewsDiff {
         return out;
     }
 
-    /** The posts not seen before. A post deleted is not news. */
-    public static List<News> posts(Set<String> before, List<Post> posts) {
+    /** The posts not seen before, their pictures as full addresses on the site at siteUrl. A post deleted is not news. */
+    public static List<News> posts(Set<String> before, List<Post> posts, String siteUrl) {
         List<News> out = new ArrayList<>();
-        for (Post p : posts) if (!before.contains("post:" + p.id)) out.add(news(News.Type.POST, p.title.strip(), List.of(), p.text));
+        for (Post p : posts) if (!before.contains("post:" + p.id)) out.add(news("staff".equalsIgnoreCase(p.kind) ? News.Type.POST : News.Type.BREAKING, p.title.strip(), List.of(), p.text, imageUrl(siteUrl, p.image)));
         return out;
+    }
+
+    /**
+     * The address of a picture the bot saved: its path is from the site's root (like the flags), so gaia/news/x.png on the site of
+     * https://bmcmc.online/gaia/territories.json is https://bmcmc.online/gaia/news/x.png. A full address is kept; null or a broken one gives null.
+     */
+    public static String imageUrl(String siteUrl, String path) {
+        if (path == null || path.isBlank()) return null;
+        try {
+            if (path.strip().matches("(?i)https?://.*")) return java.net.URI.create(path.strip()).toString();
+            return java.net.URI.create(siteUrl).resolve("/" + path.strip().replaceFirst("^/+", "")).toString();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static TerritoryFile.AllianceInfo alliance(TerritoryFile f, String name) {

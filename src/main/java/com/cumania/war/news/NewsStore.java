@@ -83,8 +83,8 @@ public final class NewsStore {
     }
 
     /** A new download of a map's news.json (the Staff's posts): the posts not seen before, kept like the other news. */
-    public synchronized List<News> observePosts(String map, List<NewsDiff.Post> posts, Instant now, int keep) {
-        return record(map + "#posts", map, NewsDiff.postFacts(posts), before -> NewsDiff.posts(before, posts), now, keep);
+    public synchronized List<News> observePosts(String map, String siteUrl, List<NewsDiff.Post> posts, Instant now, int keep) {
+        return record(map + "#posts", map, NewsDiff.postFacts(posts), before -> NewsDiff.posts(before, posts, siteUrl), now, keep);
     }
 
     /** key = where the facts are kept (a map's site, or its posts). The first time a key is seen, its facts are only remembered. */

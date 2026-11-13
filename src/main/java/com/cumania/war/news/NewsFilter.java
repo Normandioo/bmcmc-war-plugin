@@ -4,7 +4,7 @@ package com.cumania.war.news;
 public enum NewsFilter {
     WAR, ALLIANCE, ULTIMATUM, TRUCE;
 
-    /** Whether a news of this type is shown when this filter is on. The Staff's posts belong to no filter: they show only with every filter off. */
+    /** Whether a news of this type is shown when this filter is on. The Staff's posts (notices and Breaking News) belong to no filter: they show only with every filter off. */
     public boolean matches(News.Type type) {
         return switch (this) {
             case WAR -> type == News.Type.WAR || type == News.Type.PEACE;

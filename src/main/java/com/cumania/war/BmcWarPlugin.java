@@ -95,6 +95,7 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     CapitulationTable table() { return table; }
     /** Tells the BMC Atlas client mod what changed (the "bmcatlas:sync" channel). */
     private ModSync sync;
+    ModSync sync() { return sync; }
     /** New versions of the plugin (for the staff) and of the BMC Atlas mod (for players whose mod is old). */
     private UpdateNotices updates;
     /** Diplomatic news worked out from the site's diplomacy (/news). */
