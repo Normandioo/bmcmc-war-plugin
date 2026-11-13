@@ -23,9 +23,9 @@ import java.util.Set;
 
 /** /bmcwar status | where | engagement ... | set &lt;city&gt; &lt;state&gt; | reset [war] confirm | reload */
 final class WarCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "bridge", "maps", "set", "reset", "reload");
+    private static final List<String> SUBS = List.of("status", "where", "table", "debug", "engagement", "undo", "log", "bridge", "maps", "news", "set", "reset", "reload");
     private static final List<String> KINDS = List.of("strategic", "tactical", "assault", "raid", "free");
-    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | bridge [<bridge> <open|close|site> [force]] [war=<id>] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | maps | reload";
+    private static final String USAGE = "Usage: /bmcwar status | where | table | debug | engagement [start <strategic|tactical|assault|raid|free> [war=<id>] [cities...] | go | pause | resume | stop [war]] | undo [war] | log [war] [lines] | bridge [<bridge> <open|close|site> [force]] [war=<id>] | set <city> <red|blue|green|contested|uncontrolled|clear> | reset [war] confirm | maps | news | reload";
     private static final List<String> STATES = List.of("red", "blue", "green", "contested", "uncontrolled", "clear");
 
     private final BmcWarPlugin plugin;
@@ -46,6 +46,7 @@ final class WarCommand implements CommandExecutor, TabCompleter {
             case "bridge", "bridges" -> bridge(sender, args);
             case "maps", "worlds" -> { if (admin(sender)) maps(sender); }
             case "engagement", "eng" -> engagement(sender, args);
+            case "news", "noticias" -> plugin.news().open(sender);
             case "table", "capitulation", "cap" -> {
                 if (!(sender instanceof Player p)) { say(sender, "Only a player can show the table.", NamedTextColor.GRAY); return true; }
                 if (plugin.table().toggle(p)) say(sender, "Capitulation table on (only for you). /bmcwar table again to hide it.", NamedTextColor.GREEN);

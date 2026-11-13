@@ -151,6 +151,7 @@ final class MapSource {
             m.site = parsed;
             m.fetchedAt = System.currentTimeMillis();
             m.error = null;
+            plugin.news().observe(m, response.body());
             Bukkit.getScheduler().runTask(plugin, () -> { plugin.forgetHeights(m); m.rebuildMarkers(); });
         } catch (Exception e) {
             if (!String.valueOf(e).equals(m.error)) plugin.getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);

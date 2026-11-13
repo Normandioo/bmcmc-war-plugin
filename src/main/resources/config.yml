@@ -32,6 +32,23 @@ updates:
 mod-sync:
   enabled: true
 
+# Diplomatic news: what changed in the site's diplomacy between two downloads (wars declared and ended, alliances formed, joined, left
+# and dissolved, truces, non-aggression pacts, ultimatums, subjects). Kept in plugins/BmcWar/news.json and read with /news (a book; the
+# Staff's "notes" for a war or an alliance on the site are shown there). The first download of a map only remembers what is there.
+news:
+  enabled: true
+  # The kinds said in the chat when they happen; every kind is kept for /news anyway.
+  # Kinds: war, peace, post (a news the Staff posted with the site's Discord bot, /news post), alliance, alliance-join, alliance-leave,
+  # alliance-end, truce, nap, ultimatum, vassal, independence
+  announce: [war, peace, post, alliance, alliance-join, alliance-leave, alliance-end, ultimatum, vassal, independence]
+  # How often (seconds) each map's news.json is read: the Staff's posts (/news post of the site's Discord bot), in the same folder as the
+  # map's territories.json (https://bmcmc.online/gaia/news.json). A small file, so it is read more often than the site's data.
+  posts-refresh-seconds: 60
+  # How many news are kept (the book shows the latest 30).
+  keep: 50
+  # Tell players who join how many news came out since they last opened /news.
+  on-join: true
+
 capture:
   # How long (SECONDS) a side must stay inside a locality's land, with no opponent there, to take it (Laws 7.8.5-6):
   #   Settlement = Small, Medium, Large or Colonial (5.8.4)

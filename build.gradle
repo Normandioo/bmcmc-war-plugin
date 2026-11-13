@@ -33,7 +33,7 @@ sourceSets { checks { java.srcDir 'test' } }
 sourceSets.checks.compileClasspath = sourceSets.main.output + sourceSets.main.compileClasspath
 sourceSets.checks.runtimeClasspath = sourceSets.checks.output + sourceSets.main.output + sourceSets.main.compileClasspath
 [EngineCheck: 'territories-sample', WarCheck: 'territories-network-sample', SyncCheck: 'territories-sample',
- DynmapCheck: 'territories-sample', ReloadCheck: 'territories-network-sample'].each { checkName, sample ->
+ DynmapCheck: 'territories-sample', ReloadCheck: 'territories-network-sample', NewsCheck: 'territories-sample'].each { checkName, sample ->
     def run = tasks.register("run${checkName}", JavaExec) {
         classpath = sourceSets.checks.runtimeClasspath
         mainClass = checkName
