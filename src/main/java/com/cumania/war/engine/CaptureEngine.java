@@ -154,10 +154,27 @@ public final class CaptureEngine {
         graphs.remove(warId);   // the front is worked out again
     }
 
+    private record Solved(SiteData site, long signature, WarGraph graph) {}
+    private final Map<String, Solved> solved = new HashMap<>();
+
+    /**
+     * The front, worked out again only when what it is made from changed: the site data, the icon of each city (who holds it), the staff's
+     * bridges. Most seconds nothing changed, and working it out costs a few milliseconds of the game thread (per war, every second).
+     */
+    private WarGraph solve(SiteData site, SiteData.War war) {
+        long sig = 31L * bridges(war).hashCode() + (rules.encirclement() ? 1 : 0);
+        for (SiteData.City c : site.cities()) sig = sig * 1_000_003L + markers.read(war, c);
+        Solved s = solved.get(war.id());
+        if (s != null && s.site() == site && s.signature() == sig) return s.graph();
+        WarGraph g = WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war));
+        solved.put(war.id(), new Solved(site, sig, g));
+        return g;
+    }
+
     /** The front as of the last tick (or worked out now, when the war has not been ticked yet). */
     public WarGraph graph(SiteData site, SiteData.War war) {
         WarGraph g = graphs.get(war.id());
-        return g != null ? g : WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war));
+        return g != null ? g : solve(site, war);
     }
 
     // ----- Engagements -----
@@ -270,7 +287,7 @@ public final class CaptureEngine {
             events.add(new Event(Type.ENGAGEMENT_END, war, null, -1, -1, List.of()));
             eng = null;
         }
-        WarGraph g = WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war));
+        WarGraph g = solve(site, war);
         graphs.put(war.id(), g);
         // a nation that has just Capitulated (7.9.7): said once, and the engagement going on ends (nothing more is captured this tick)
         java.util.Set<String> now = new java.util.LinkedHashSet<>();
@@ -287,7 +304,7 @@ public final class CaptureEngine {
             if (end) { stopEngagement(site, war); eng = null; }
             for (Capitulation.Score c : fallen) events.add(new Event(Type.CAPITULATED, war, c.capital(), c.side(), end ? 1 : 0));
             if (end) {
-                graphs.put(war.id(), g = WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war)));   // a Raid's fort may have gone back
+                graphs.put(war.id(), g = solve(site, war));   // a Raid's fort may have gone back
                 return events;
             }
         }
@@ -298,7 +315,7 @@ public final class CaptureEngine {
             for (String key : eng.targets()) { SiteData.City c = site.city(key); if (c != null) targets.add(c); }
             stopEngagement(site, war);
             events.add(new Event(Type.OBJECTIVE_TAKEN, war, targets.get(0), won, -1, targets));
-            graphs.put(war.id(), WarGraph.solve(site, war, markers, rules.encirclement(), bridges(war)));   // a Raid's fort has gone back
+            graphs.put(war.id(), solve(site, war));   // a Raid's fort has gone back
             return events;
         }
         int sides = war.sides().size();

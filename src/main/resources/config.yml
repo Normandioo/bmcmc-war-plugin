@@ -41,6 +41,12 @@ news:
   # Kinds: war, peace, post (a news the Staff posted with the site's Discord bot, /news post), alliance, alliance-join, alliance-leave,
   # alliance-end, truce, nap, ultimatum, vassal, independence
   announce: [war, peace, post, alliance, alliance-join, alliance-leave, alliance-end, ultimatum, vassal, independence]
+  # The dates in the news are told in the server's calendar ("March 3rd, 868 AES"), not UTC. It is the site's world clock (timeline-config.json):
+  # one real day is one year counted from year-zero (UTC), 2 real hours are a month, 4 minutes a day.
+  calendar:
+    year-zero: "2024-05-25"
+    era: AES
+    before-era: BES
   # How often (seconds) each map's news.json is read: the Staff's posts (/news post of the site's Discord bot), in the same folder as the
   # map's territories.json (https://bmcmc.online/gaia/news.json). A small file, so it is read more often than the site's data.
   posts-refresh-seconds: 60

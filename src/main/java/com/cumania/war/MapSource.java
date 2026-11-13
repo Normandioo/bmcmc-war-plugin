@@ -136,22 +136,44 @@ final class MapSource {
         }
     }
 
+    /** The text of a download, unzipped when the server sent it zipped. */
+    static String body(HttpResponse<byte[]> r) throws java.io.IOException {
+        byte[] b = r.body();
+        if (r.headers().firstValue("Content-Encoding").orElse("").equalsIgnoreCase("gzip"))
+            try (var in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(b))) { b = in.readAllBytes(); }
+        return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    static String sha1(String text) {
+        try { return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-1").digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))); }
+        catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
     void fetch(WarMap m) {
         String url = m.url;
         SiteData site = m.site;
         Path cache = m.cache;
         try {
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").GET().build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode());
-            SiteData parsed = SiteData.parse(response.body(), plugin.fallbackRadius());
+            boolean first = m.fetchedAt == 0;   // the first download after the start always goes through: the cache it started from may be old
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").header("Accept-Encoding", "gzip");
+            if (!first && m.etag != null) request.header("If-None-Match", m.etag);
+            HttpResponse<byte[]> raw = http.send(request.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            if (raw.statusCode() == 304) { m.fetchedAt = System.currentTimeMillis(); m.error = null; return; }   // nothing changed
+            if (raw.statusCode() != 200) throw new IllegalStateException("HTTP " + raw.statusCode());
+            String text = body(raw);
+            String hash = sha1(text);
+            m.etag = raw.headers().firstValue("ETag").orElse(null);
+            if (!first && hash.equals(m.bodyHash)) { m.fetchedAt = System.currentTimeMillis(); m.error = null; return; }   // the same data: nothing to work out again
+            SiteData parsed = SiteData.parse(text, plugin.fallbackRadius());
+            m.bodyHash = hash;
             Files.createDirectories(cache.getParent());
-            Files.writeString(cache, response.body());
+            Files.writeString(cache, text);
             if (parsed.network() == null && plugin.getConfig().getBoolean("rules.in-play", true) && (site == null || site.network() != null))
                 plugin.getLogger().warning("[" + m.name + "] The site's data has no Connections yet (\"network\" in territories.json): In Play cannot be worked out, so every locality of a war counts as In Play.");
             m.site = parsed;
             m.fetchedAt = System.currentTimeMillis();
             m.error = null;
-            plugin.news().observe(m, response.body());
+            plugin.news().observe(m, text);
             Bukkit.getScheduler().runTask(plugin, () -> { plugin.forgetHeights(m); m.rebuildMarkers(); });
         } catch (Exception e) {
             if (!String.valueOf(e).equals(m.error)) plugin.getLogger().warning("[" + m.name + "] Could not update the site's data from " + url + ": " + e);

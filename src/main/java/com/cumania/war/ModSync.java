@@ -64,8 +64,23 @@ final class ModSync implements Listener {
     private String build(WarMap m) {
         SiteData s = m.site;
         if (s == null) return null;
-        return SyncMessages.map(m.name, m.url, s, plugin.handledWars(m), m.markers, war -> m.engine == null ? Map.of() : m.engine.bridges(war));
+        List<SiteData.War> wars = plugin.handledWars(m);
+        // building the message costs a few milliseconds and most seconds nothing changed: it is built again only when what it says did
+        long sig = 17;
+        for (SiteData.War war : wars) {
+            sig = sig * 31 + war.id().hashCode();
+            if (m.engine != null) sig = sig * 31 + m.engine.bridges(war).hashCode();
+            for (SiteData.City c : s.cities()) sig = sig * 1_000_003L + m.markers.read(war, c);
+        }
+        Built b = built.get(m.name);
+        if (b != null && b.site() == s && b.signature() == sig) return b.message();
+        String msg = SyncMessages.map(m.name, m.url, s, wars, m.markers, war -> m.engine == null ? Map.of() : m.engine.bridges(war));
+        built.put(m.name, new Built(s, sig, msg));
+        return msg;
     }
+
+    private record Built(SiteData site, long signature, String message) {}
+    private final Map<String, Built> built = new HashMap<>();
 
     private void send(Player p, String msg) {
         byte[] bytes = msg.getBytes(StandardCharsets.UTF_8);
