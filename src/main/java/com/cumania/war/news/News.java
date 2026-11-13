@@ -27,6 +27,7 @@ public record News(long id, String map, Type type, String title, List<String> de
     public static List<String> chunks(String text, int max) {
         List<String> out = new ArrayList<>();
         if (text == null) return out;
+        max = Math.max(1, max);   // a zero would cut nothing off and never end
         String rest = text.strip();
         while (rest.length() > max) {
             int cut = rest.lastIndexOf(' ', max);

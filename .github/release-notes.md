@@ -2,6 +2,10 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.20.1
+- **The news resource pack has a public address.** The pack is in the repository: set `resource-pack=https://raw.githubusercontent.com/Normandioo/bmcmc-war-plugin/main/pack/bmcnews-pack.zip` and `resource-pack-sha1=acfc56d37d948c813432a28a806aba18068b78df` in `server.properties` (the sha1 changes whenever the pack is rebuilt with `python tools/build_pack.py`; the notes of the release that changes it say so).
+- **A site that answers with something huge can no longer fill the server's memory:** downloads are read as a stream and refused above 16 MB. A zero-width text cut in `News.chunks` can no longer loop forever.
+
 ### New in 0.20.0
 - **Diplomatic news.** The plugin compares the site's diplomacy each time it downloads it and turns every change into a news item: war declared or ended, alliances (formed, joined, left, dissolved), truces and pacts, ultimatums, subjects and independence, written like a war newspaper, with dates in the world's calendar (AES). The Staff's posts (the site's Discord bot, `/news post`) show up too. A framed block in the chat announces each one and opens the menu when clicked; players are told what they missed when they join. `/news` (or `/bmcwar news`) opens the menu: a chest with filters and pages, and a click on a news opens it in a window with the country flags. Settings: the `news` section of `config.yml` (new keys, added by themselves).
 - **The menu needs the resource pack.** Its title is drawn by a resource pack: build it with `python tools/build_pack.py` (needs the site's repo for the flags), host the zip and set `resource-pack` and `resource-pack-sha1` in `server.properties`. Without the pack the menu title shows broken characters.

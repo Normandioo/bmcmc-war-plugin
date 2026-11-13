@@ -86,11 +86,12 @@ final class NewsBoard implements Listener {
                 var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).timeout(java.time.Duration.ofSeconds(20)).header("User-Agent", "bmc-war");
                 String tag = postTags.get(m.name);
                 if (tag != null) request.header("If-None-Match", tag);   // nothing new: a short answer, nothing to read
-                var response = plugin.source().http().send(request.GET().build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+                var response = plugin.source().http().send(request.GET().build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() != 200) response.body().close();
                 if (response.statusCode() == 304) continue;
                 if (response.statusCode() != 200 && response.statusCode() != 404) throw new IllegalStateException("HTTP " + response.statusCode());
                 response.headers().firstValue("ETag").ifPresentOrElse(t -> postTags.put(m.name, t), () -> postTags.remove(m.name));
-                List<NewsDiff.Post> posts = response.statusCode() == 404 ? List.of() : NewsDiff.parsePosts(response.body());
+                List<NewsDiff.Post> posts = response.statusCode() == 404 ? List.of() : NewsDiff.parsePosts(MapSource.body(response));
                 List<News> fresh = store.observePosts(m.name, posts, Instant.now(), plugin.getConfig().getInt("news.keep", 50));
                 if (postErrors.remove(m.name) != null) plugin.getLogger().info("[" + m.name + "] " + url + " can be read again.");
                 store.save();   // also the first reading, so a post made while the server is off is still news after a restart
