@@ -170,26 +170,35 @@ public final class NewsCheck {
         for (News.Type type : News.Type.values()) {
             int in = 0;
             for (NewsFilter fl : NewsFilter.values()) if (fl.matches(type)) in++;
-            once &= in == (type == News.Type.POST ? 0 : 1);
+            once &= in == (type == News.Type.POST || type == News.Type.BREAKING ? 0 : 1);
         }
         check("each kind of news is in one filter, posts in none", once);
 
         // the Staff's posts: the map's news.json (/news post of the site's Discord bot)
+        final String SITE = "https://bmcmc.online/gaia/territories.json";
         String one = "{\"news\": [{\"id\": \"2026-11-12-FordClosed\", \"title\": \"Greneshire closes the Ford\", \"text\": \"Caravans must go round.\", \"posted\": \"2026-11-12T11:00:00Z\"}]}";
         String two = one.replace("}]}", "}, {\"id\": \"2026-11-12-Reopened\", \"title\": \"The Ford reopens\", \"text\": \"Trade is back.\"}, {\"id\": \"x\"}]}");
         List<NewsDiff.Post> posts1 = NewsDiff.parsePosts(one), posts2 = NewsDiff.parsePosts(two);
         check("news.json read; a post without a title is left out", posts1.size() == 1 && posts2.size() == 2);
         check("no list / empty file: no posts", NewsDiff.parsePosts("{}").isEmpty() && NewsDiff.parsePosts("").isEmpty());
-        l = NewsDiff.posts(NewsDiff.postFacts(posts1), posts2);
-        check("a new post is news, with its text", one(l, News.Type.POST, "The Ford reopens") && "Trade is back.".equals(l.get(0).notes()));
-        check("a post deleted is not news", NewsDiff.posts(NewsDiff.postFacts(posts2), posts1).isEmpty());
+        l = NewsDiff.posts(NewsDiff.postFacts(posts1), posts2, SITE);
+        check("a new post is news, with its text", one(l, News.Type.BREAKING, "The Ford reopens") && "Trade is back.".equals(l.get(0).notes()));
+        check("a post without a picture has none", l.get(0).image() == null);
+        String staff = one.replace("}]}", "}, {\"id\": \"s\", \"title\": \"Restart at 8\", \"text\": \"t\", \"kind\": \"staff\"}]}");
+        check("a post marked staff is a Staff notice", NewsDiff.posts(NewsDiff.postFacts(posts1), NewsDiff.parsePosts(staff), SITE).get(0).type() == News.Type.POST);
+        String pic = one.replace("}]}", "}, {\"id\": \"p\", \"title\": \"Siege\", \"text\": \"t\", \"image\": \"gaia/news/p.png\"}]}");
+        l = NewsDiff.posts(NewsDiff.postFacts(posts1), NewsDiff.parsePosts(pic), SITE);
+        check("a post's picture is a full address on the site", "https://bmcmc.online/gaia/news/p.png".equals(l.get(0).image()));
+        check("a full picture address is kept", "https://x.org/a.png".equals(NewsDiff.imageUrl(SITE, "https://x.org/a.png")));
+        check("no picture, or a broken one, gives null", NewsDiff.imageUrl(SITE, " ") == null && NewsDiff.imageUrl(SITE, "a b|c") == null);
+        check("a post deleted is not news", NewsDiff.posts(NewsDiff.postFacts(posts2), posts1, SITE).isEmpty());
         Path pdir = Files.createTempDirectory("newsposts");
         NewsStore ps = new NewsStore(pdir.resolve("news.json"));
-        check("first reading of a map's posts only remembers them", ps.observePosts("gaia", posts1, now, 50).isEmpty());
+        check("first reading of a map's posts only remembers them", ps.observePosts("gaia", SITE, posts1, now, 50).isEmpty());
         check("the site's first download is remembered apart from the posts", ps.observe("gaia", base, now, 50).isEmpty());
-        l = ps.observePosts("gaia", posts2, now, 50);
+        l = ps.observePosts("gaia", SITE, posts2, now, 50);
         check("then a new post is news, on its map", l.size() == 1 && l.get(0).map().equals("gaia") && l.get(0).id() == 1);
-        check("the site's data does not undo the posts' memory", ps.observe("gaia", base, now, 50).isEmpty() && ps.observePosts("gaia", posts2, now, 50).isEmpty());
+        check("the site's data does not undo the posts' memory", ps.observe("gaia", base, now, 50).isEmpty() && ps.observePosts("gaia", SITE, posts2, now, 50).isEmpty());
 
         // subjects
         TerritoryFile sub = fresh();

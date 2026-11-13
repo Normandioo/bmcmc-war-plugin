@@ -92,7 +92,7 @@ final class NewsBoard implements Listener {
                 if (response.statusCode() != 200 && response.statusCode() != 404) throw new IllegalStateException("HTTP " + response.statusCode());
                 response.headers().firstValue("ETag").ifPresentOrElse(t -> postTags.put(m.name, t), () -> postTags.remove(m.name));
                 List<NewsDiff.Post> posts = response.statusCode() == 404 ? List.of() : NewsDiff.parsePosts(MapSource.body(response));
-                List<News> fresh = store.observePosts(m.name, posts, Instant.now(), plugin.getConfig().getInt("news.keep", 50));
+                List<News> fresh = store.observePosts(m.name, m.url, posts, Instant.now(), plugin.getConfig().getInt("news.keep", 50));
                 if (postErrors.remove(m.name) != null) plugin.getLogger().info("[" + m.name + "] " + url + " can be read again.");
                 store.save();   // also the first reading, so a post made while the server is off is still news after a restart
                 if (fresh.isEmpty()) continue;
@@ -105,7 +105,11 @@ final class NewsBoard implements Listener {
 
     private void announce(News n) {
         plugin.getLogger().info("[news] " + n.title());
-        if (!plugin.getConfig().getStringList("news.announce").contains(n.type().key())) return;
+        List<String> told = plugin.getConfig().getStringList("news.announce");
+        // a config from before Breaking News has only "post", which then meant every post
+        boolean said = told.contains(n.type().key()) || n.type() == News.Type.BREAKING && told.contains("post");
+        plugin.sync().news(n, said);   // the mod lists every news, and pops up the ones the chat tells
+        if (!said) return;
         Bukkit.getServer().broadcast(block(Component.text()
                 .append(Component.text(headline(n.type()), color(n.type()), TextDecoration.BOLD)).append(Component.text("  " + n.title(), NamedTextColor.WHITE)).build()));
     }
@@ -129,7 +133,7 @@ final class NewsBoard implements Listener {
 
     private static String headline(News.Type t) {
         return switch (t) {
-            case WAR -> "WAR!"; case PEACE -> "Peace"; case POST -> "Staff notice"; case ALLIANCE -> "New alliance"; case ALLIANCE_JOIN -> "An alliance grows";
+            case WAR -> "WAR!"; case PEACE -> "Peace"; case POST -> "Staff notice"; case BREAKING -> "Breaking News"; case ALLIANCE -> "New alliance"; case ALLIANCE_JOIN -> "An alliance grows";
             case ALLIANCE_LEAVE -> "An alliance breaks"; case ALLIANCE_END -> "Alliance dissolved"; case TRUCE -> "Truce"; case NAP -> "Pact signed";
             case ULTIMATUM -> "Ultimatum"; case VASSAL -> "New subject"; case INDEPENDENCE -> "Independence";
         };
@@ -137,7 +141,7 @@ final class NewsBoard implements Listener {
 
     static NamedTextColor color(News.Type t) {
         return switch (t) {
-            case WAR -> NamedTextColor.RED; case PEACE, TRUCE, NAP -> NamedTextColor.GREEN; case POST -> NamedTextColor.GOLD; case ULTIMATUM -> NamedTextColor.YELLOW;
+            case WAR -> NamedTextColor.RED; case PEACE, TRUCE, NAP -> NamedTextColor.GREEN; case POST -> NamedTextColor.GOLD; case BREAKING -> NamedTextColor.RED; case ULTIMATUM -> NamedTextColor.YELLOW;
             case ALLIANCE, ALLIANCE_JOIN, ALLIANCE_LEAVE, ALLIANCE_END -> NamedTextColor.AQUA; case VASSAL, INDEPENDENCE -> NamedTextColor.LIGHT_PURPLE;
         };
     }

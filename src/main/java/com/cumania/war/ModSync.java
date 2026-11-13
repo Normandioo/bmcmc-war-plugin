@@ -44,6 +44,23 @@ final class ModSync implements Listener {
             String msg = build(m);
             if (msg != null) send(p, msg);
         }
+        // the latest news, oldest first, for the mod's news panel (one message each: a long Staff text must not push the rest over the size limit)
+        if (plugin.news() != null) {
+            List<com.cumania.war.news.News> latest = new java.util.ArrayList<>(plugin.news().latest(plugin.getConfig().getInt("mod-sync.news", 20)));
+            java.util.Collections.reverse(latest);
+            for (com.cumania.war.news.News n : latest) send(p, newsMessage(n, false));
+        }
+    }
+
+    /** A news that just came out, to every player whose mod listens; fresh = the mod pops it up. */
+    void news(com.cumania.war.news.News n, boolean fresh) {
+        if (!enabled()) return;
+        String msg = newsMessage(n, fresh);
+        for (Player p : Bukkit.getOnlinePlayers()) if (p.getListeningPluginChannels().contains(SyncMessages.CHANNEL)) send(p, msg);
+    }
+
+    private static String newsMessage(com.cumania.war.news.News n, boolean fresh) {
+        return SyncMessages.news(n, com.cumania.war.news.NewsDiff.clock().format(java.time.Instant.ofEpochMilli(n.time())), fresh);
     }
 
     /** Once a second: sends the maps whose state changed to every player whose mod listens. */
@@ -85,7 +102,7 @@ final class ModSync implements Listener {
     private void send(Player p, String msg) {
         byte[] bytes = msg.getBytes(StandardCharsets.UTF_8);
         if (bytes.length > Messenger.MAX_MESSAGE_SIZE) {
-            if (!tooBigWarned) plugin.getLogger().warning("A map's state is too big to send to the BMC Atlas mod (" + bytes.length + " bytes): the mod keeps reading dynmap for it.");
+            if (!tooBigWarned) plugin.getLogger().warning("A message is too big to send to the BMC Atlas mod (" + bytes.length + " bytes): the mod keeps reading dynmap for it.");
             tooBigWarned = true;
             return;
         }
