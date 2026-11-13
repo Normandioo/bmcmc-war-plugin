@@ -132,6 +132,34 @@ public final class NewsDiff {
         return null;
     }
 
+    // ----- The Staff's posts: the map's news.json (/news post of the site's Discord bot), next to its territories.json -----
+
+    /** A news the Staff posted; posted = ISO UTC. */
+    public static final class Post { public String id, title, text, posted; }
+
+    /** What news.json holds. */
+    private static final class PostsFile { List<Post> news; }
+
+    /** The posts in a news.json (oldest first); an empty list when it has none. */
+    public static List<Post> parsePosts(String json) throws com.google.gson.JsonSyntaxException {
+        PostsFile f = new com.google.gson.Gson().fromJson(json, PostsFile.class);
+        if (f == null || f.news == null) return List.of();
+        return f.news.stream().filter(p -> p != null && p.id != null && p.title != null && !p.title.isBlank()).toList();
+    }
+
+    public static Set<String> postFacts(List<Post> posts) {
+        Set<String> out = new TreeSet<>();
+        for (Post p : posts) out.add("post:" + p.id);
+        return out;
+    }
+
+    /** The posts not seen before. A post deleted is not news. */
+    public static List<News> posts(Set<String> before, List<Post> posts) {
+        List<News> out = new ArrayList<>();
+        for (Post p : posts) if (!before.contains("post:" + p.id)) out.add(news(News.Type.POST, p.title.strip(), List.of(), p.text));
+        return out;
+    }
+
     private static TerritoryFile.AllianceInfo alliance(TerritoryFile f, String name) {
         if (f.war == null) return null;
         for (TerritoryFile.AllianceInfo a : nn(f.war.alliances)) if (name.equals(allianceName(a))) return a;

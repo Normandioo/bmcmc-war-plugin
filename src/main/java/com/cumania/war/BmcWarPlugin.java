@@ -66,6 +66,8 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         Bukkit.getScheduler().runTaskTimer(this, this::tick, 40L, 20L);
         long minutes = Math.max(1, getConfig().getLong("site.refresh-minutes", 5));
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, source::fetchSite, 20L, minutes * 60 * 20L);
+        long postSeconds = Math.max(15, getConfig().getLong("news.posts-refresh-seconds", 60));
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, news::fetchPosts, 100L, postSeconds * 20L);
     }
 
     /**

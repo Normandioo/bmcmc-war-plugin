@@ -12,7 +12,7 @@ import java.util.Locale;
 public record News(long id, String map, Type type, String title, List<String> details, String notes, long time) {
 
     public enum Type {
-        WAR, PEACE, ALLIANCE, ALLIANCE_JOIN, ALLIANCE_LEAVE, ALLIANCE_END, TRUCE, NAP, ULTIMATUM, VASSAL, INDEPENDENCE;
+        WAR, PEACE, POST, ALLIANCE, ALLIANCE_JOIN, ALLIANCE_LEAVE, ALLIANCE_END, TRUCE, NAP, ULTIMATUM, VASSAL, INDEPENDENCE;
 
         /** The name used in the config (news.announce): "alliance-join". */
         public String key() { return name().toLowerCase(Locale.ROOT).replace('_', '-'); }

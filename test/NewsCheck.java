@@ -107,6 +107,23 @@ public final class NewsCheck {
         check("ultimatum and pact", l.size() == 2 && l.stream().anyMatch(x -> x.type() == News.Type.ULTIMATUM && x.title().equals("Anthropia sends an ultimatum to Indiana"))
                 && l.stream().anyMatch(x -> x.type() == News.Type.NAP && x.details().get(0).equals("No end date")));
 
+        // the Staff's posts: the map's news.json (/news post of the site's Discord bot)
+        String one = "{\"news\": [{\"id\": \"2026-11-12-FordClosed\", \"title\": \"Greneshire closes the Ford\", \"text\": \"Caravans must go round.\", \"posted\": \"2026-11-12T11:00:00Z\"}]}";
+        String two = one.replace("}]}", "}, {\"id\": \"2026-11-12-Reopened\", \"title\": \"The Ford reopens\", \"text\": \"Trade is back.\"}, {\"id\": \"x\"}]}");
+        List<NewsDiff.Post> posts1 = NewsDiff.parsePosts(one), posts2 = NewsDiff.parsePosts(two);
+        check("news.json read; a post without a title is left out", posts1.size() == 1 && posts2.size() == 2);
+        check("no list / empty file: no posts", NewsDiff.parsePosts("{}").isEmpty() && NewsDiff.parsePosts("").isEmpty());
+        l = NewsDiff.posts(NewsDiff.postFacts(posts1), posts2);
+        check("a new post is news, with its text", one(l, News.Type.POST, "The Ford reopens") && "Trade is back.".equals(l.get(0).notes()));
+        check("a post deleted is not news", NewsDiff.posts(NewsDiff.postFacts(posts2), posts1).isEmpty());
+        Path pdir = Files.createTempDirectory("newsposts");
+        NewsStore ps = new NewsStore(pdir.resolve("news.json"));
+        check("first reading of a map's posts only remembers them", ps.observePosts("gaia", posts1, now, 50).isEmpty());
+        check("the site's first download is remembered apart from the posts", ps.observe("gaia", base, now, 50).isEmpty());
+        l = ps.observePosts("gaia", posts2, now, 50);
+        check("then a new post is news, on its map", l.size() == 1 && l.get(0).map().equals("gaia") && l.get(0).id() == 1);
+        check("the site's data does not undo the posts' memory", ps.observe("gaia", base, now, 50).isEmpty() && ps.observePosts("gaia", posts2, now, 50).isEmpty());
+
         // subjects
         TerritoryFile sub = fresh();
         f = sub;

@@ -38,8 +38,12 @@ mod-sync:
 news:
   enabled: true
   # The kinds said in the chat when they happen; every kind is kept for /news anyway.
-  # Kinds: war, peace, alliance, alliance-join, alliance-leave, alliance-end, truce, nap, ultimatum, vassal, independence
-  announce: [war, peace, alliance, alliance-join, alliance-leave, alliance-end, ultimatum, vassal, independence]
+  # Kinds: war, peace, post (a news the Staff posted with the site's Discord bot, /news post), alliance, alliance-join, alliance-leave,
+  # alliance-end, truce, nap, ultimatum, vassal, independence
+  announce: [war, peace, post, alliance, alliance-join, alliance-leave, alliance-end, ultimatum, vassal, independence]
+  # How often (seconds) each map's news.json is read: the Staff's posts (/news post of the site's Discord bot), in the same folder as the
+  # map's territories.json (https://bmcmc.online/gaia/news.json). A small file, so it is read more often than the site's data.
+  posts-refresh-seconds: 60
   # How many news are kept (the book shows the latest 30).
   keep: 50
   # Tell players who join how many news came out since they last opened /news.

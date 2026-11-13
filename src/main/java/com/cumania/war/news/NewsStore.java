@@ -63,11 +63,20 @@ public final class NewsStore {
      * remembers its facts, so a new server, a new map or a lost news.json does not tell the whole diplomacy as news.
      */
     public synchronized List<News> observe(String map, TerritoryFile f, Instant now, int keep) {
-        Set<String> facts = NewsDiff.facts(f, now);
-        List<String> before = s.facts.put(map, new ArrayList<>(facts));
+        return record(map, map, NewsDiff.facts(f, now), before -> NewsDiff.diff(before, f, now), now, keep);
+    }
+
+    /** A new download of a map's news.json (the Staff's posts): the posts not seen before, kept like the other news. */
+    public synchronized List<News> observePosts(String map, List<NewsDiff.Post> posts, Instant now, int keep) {
+        return record(map + "#posts", map, NewsDiff.postFacts(posts), before -> NewsDiff.posts(before, posts), now, keep);
+    }
+
+    /** key = where the facts are kept (a map's site, or its posts). The first time a key is seen, its facts are only remembered. */
+    private List<News> record(String key, String map, Set<String> facts, java.util.function.Function<Set<String>, List<News>> diff, Instant now, int keep) {
+        List<String> before = s.facts.put(key, new ArrayList<>(facts));
         if (before == null) return List.of();
         List<News> out = new ArrayList<>();
-        for (News n : NewsDiff.diff(new TreeSet<>(before), f, now)) {
+        for (News n : diff.apply(new TreeSet<>(before))) {
             News kept = n.withId(++s.lastId, map, now.toEpochMilli());
             s.items.add(kept);
             out.add(kept);

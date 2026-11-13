@@ -1,6 +1,7 @@
 package com.cumania.war;
 
 import com.cumania.war.news.News;
+import com.cumania.war.news.NewsDiff;
 import com.cumania.war.news.NewsStore;
 import com.cumania.war.site.TerritoryFile;
 import net.kyori.adventure.inventory.Book;
@@ -56,6 +57,34 @@ final class NewsBoard implements Listener {
         }
         if (fresh.isEmpty()) return;
         Bukkit.getScheduler().runTask(plugin, () -> { for (News n : fresh) announce(n); });
+    }
+
+    /** The last error reading each map's news.json, so it is said once, not every minute. */
+    private final java.util.Map<String, String> postErrors = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Every news.posts-refresh-seconds (off the game thread): each map's news.json, the Staff's posts (/news post of the site's Discord
+     * bot), next to its territories.json. A small file, so it is read more often than the site's data. No file (404) = no posts yet.
+     */
+    void fetchPosts() {
+        if (!enabled()) return;
+        for (WarMap m : plugin.maps()) {
+            if (BmcWarPlugin.worldOf(m) == null) continue;   // a map whose world is not here, like its site data
+            String url = java.net.URI.create(m.url).resolve("news.json").toString();
+            try {
+                var response = plugin.source().http().send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).timeout(java.time.Duration.ofSeconds(20))
+                        .header("User-Agent", "bmc-war").GET().build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() != 200 && response.statusCode() != 404) throw new IllegalStateException("HTTP " + response.statusCode());
+                List<NewsDiff.Post> posts = response.statusCode() == 404 ? List.of() : NewsDiff.parsePosts(response.body());
+                List<News> fresh = store.observePosts(m.name, posts, Instant.now(), plugin.getConfig().getInt("news.keep", 50));
+                if (postErrors.remove(m.name) != null) plugin.getLogger().info("[" + m.name + "] " + url + " can be read again.");
+                store.save();   // also the first reading, so a post made while the server is off is still news after a restart
+                if (fresh.isEmpty()) continue;
+                Bukkit.getScheduler().runTask(plugin, () -> { for (News n : fresh) announce(n); });
+            } catch (Exception e) {
+                if (!String.valueOf(e).equals(postErrors.put(m.name, String.valueOf(e)))) plugin.getLogger().warning("[" + m.name + "] Could not read the Staff's news from " + url + ": " + e);
+            }
+        }
     }
 
     private void announce(News n) {
