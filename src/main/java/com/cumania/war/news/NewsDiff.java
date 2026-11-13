@@ -3,8 +3,6 @@ package com.cumania.war.news;
 import com.cumania.war.site.TerritoryFile;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -20,7 +18,12 @@ import java.util.TreeSet;
 public final class NewsDiff {
     private NewsDiff() {}
 
-    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm 'UTC'", Locale.ENGLISH).withZone(ZoneOffset.UTC);
+    /** The calendar the news tell their dates in (the server's, "March 3rd, 868 AES"): set from the config, the same for every map. */
+    private static volatile WorldClock clock = WorldClock.DEFAULT;
+
+    public static void setClock(WorldClock c) { clock = c == null ? WorldClock.DEFAULT : c; }
+
+    public static WorldClock clock() { return clock; }
 
     /** The facts the news are worked out from. Keys hold names, not only ids, so a fact gone can still be told by name. */
     public static Set<String> facts(TerritoryFile f, Instant now) {
@@ -71,13 +74,29 @@ public final class NewsDiff {
                     if (!before.contains("alliance:" + p[0])) continue;   // a new alliance: its members came with it
                     var a = alliance(f, p[0]);
                     String note = a == null ? null : nn(a.members).stream().filter(m -> m != null && p[1].equals(m.name) && m.note != null).map(m -> m.note).findFirst().orElse(null);
-                    out.add(news(News.Type.ALLIANCE_JOIN, p[1] + " joins the " + p[0], note == null ? List.of() : List.of(note), a == null ? null : a.notes));
+                    List<String> d = new ArrayList<>();
+                    d.add(tell(k, "Another banner joins the ranks: " + p[1] + " has entered the " + p[0] + "." + membersNow(a),
+                            p[1] + " has thrown in its lot with the " + p[0] + "." + membersNow(a),
+                            "The " + p[0] + " grows stronger: " + p[1] + " has sworn to stand with its members." + membersNow(a)));
+                    if (note != null) d.add(note);
+                    out.add(news(News.Type.ALLIANCE_JOIN, p[1] + " joins the " + p[0], d, a == null ? null : a.notes));
                 }
-                case "truce" -> out.add(news(News.Type.TRUCE, "Truce between " + p[0] + " and " + p[1], List.of(until(p[2])), null));
-                case "nap" -> out.add(news(News.Type.NAP, "Non-aggression pact between " + p[0] + " and " + p[1], List.of(until(p[2])), null));
+                case "truce" -> out.add(news(News.Type.TRUCE, "Truce between " + p[0] + " and " + p[1],
+                        List.of(tell(k, "The fighting pauses. " + p[0] + " and " + p[1] + " have agreed to a truce: neither may strike the other" + untilText(p[2]) + ".",
+                                "Swords are sheathed, for now. " + p[0] + " and " + p[1] + " have laid down their arms" + untilText(p[2]) + ".",
+                                "A fragile silence falls between " + p[0] + " and " + p[1] + ": a truce forbids either from attacking the other" + untilText(p[2]) + "."), until(p[2])), null));
+                case "nap" -> out.add(news(News.Type.NAP, "Non-aggression pact between " + p[0] + " and " + p[1],
+                        List.of(tell(k, p[0] + " and " + p[1] + " have shaken hands and sworn not to raise arms against each other" + untilText(p[2]) + ".",
+                                "A pledge of peace: " + p[0] + " and " + p[1] + " have signed a non-aggression pact" + untilText(p[2]) + ". Neither may attack the other.",
+                                "Ink dries on a new treaty. " + p[0] + " and " + p[1] + " have promised that no army of theirs will march on the other" + untilText(p[2]) + "."), until(p[2])), null));
                 case "ultimatum" -> out.add(news(News.Type.ULTIMATUM, p[0] + " sends an ultimatum to " + p[1],
-                        "null".equals(p[2]) ? List.of() : List.of("Sent " + date(p[2])), null));
-                case "vassal" -> out.add(news(News.Type.VASSAL, p[1] + " becomes a subject of " + p[0], List.of(p[1] + " now fights on " + p[0] + "'s side."), null));
+                        List.of(tell(k, p[0] + " has sent an ultimatum to " + p[1] + onText(p[2]) + ". The answer now lies with " + p[1] + ".",
+                                "A formal demand: " + p[0] + " delivered an ultimatum to " + p[1] + onText(p[2]) + ", which must now decide how to respond.",
+                                p[0] + " has issued an ultimatum to " + p[1] + onText(p[2]) + ". " + p[1] + " is expected to reply.")), null));
+                case "vassal" -> out.add(news(News.Type.VASSAL, p[1] + " becomes a subject of " + p[0],
+                        List.of(tell(k, p[1] + " bows before " + p[0] + ". From now on, it marches under " + p[0] + "'s banner in every war.",
+                                p[1] + " has sworn fealty to " + p[0] + ": in wars, it now fights at its overlord's side.",
+                                "A crown kneels. " + p[1] + " is now a subject of " + p[0] + " and will follow it into battle.")), null));
                 default -> { }
             }
         }
@@ -86,9 +105,18 @@ public final class NewsDiff {
             String kind = k.substring(0, k.indexOf(':')), rest = k.substring(k.indexOf(':') + 1);
             String[] p = rest.split("\\|", -1);
             switch (kind) {
-                case "alliance" -> out.add(news(News.Type.ALLIANCE_END, "The " + rest + " is dissolved", List.of(), null));
-                case "member" -> { if (after.contains("alliance:" + p[0])) out.add(news(News.Type.ALLIANCE_LEAVE, p[1] + " leaves the " + p[0], List.of(), null)); }
-                case "vassal" -> out.add(news(News.Type.INDEPENDENCE, p[1] + " is no longer a subject of " + p[0], List.of(), null));
+                case "alliance" -> out.add(news(News.Type.ALLIANCE_END, "The " + rest + " is dissolved",
+                        List.of(tell(k, "The " + rest + " is no more. Its members, once bound by oath, now go their own ways.",
+                                "Broken seals and torn treaties: the " + rest + " has been dissolved, and its former members stand alone once more.",
+                                "An era ends. The " + rest + " has been dissolved, and the oaths that bound its members are void.")), null));
+                case "member" -> { if (after.contains("alliance:" + p[0])) out.add(news(News.Type.ALLIANCE_LEAVE, p[1] + " leaves the " + p[0],
+                        List.of(tell(k, "Cracks in the pact: " + p[1] + " has walked away from the " + p[0] + "." + membersNow(alliance(f, p[0])),
+                                p[1] + " has turned its back on the " + p[0] + "." + membersNow(alliance(f, p[0])),
+                                "The " + p[0] + " loses a member: " + p[1] + " has left it." + membersNow(alliance(f, p[0])))), null)); }
+                case "vassal" -> out.add(news(News.Type.INDEPENDENCE, p[1] + " is no longer a subject of " + p[0],
+                        List.of(tell(k, p[1] + " has broken free! It is no longer a subject of " + p[0] + " and will no longer fight at its side.",
+                                "Chains are cast off: " + p[1] + " has left the rule of " + p[0] + ".",
+                                p[1] + " stands on its own feet again, no longer a subject of " + p[0] + ".")), null));
                 default -> { }   // a truce or pact that ran out, an ultimatum taken off, a war deleted: not news
             }
         }
@@ -101,15 +129,28 @@ public final class NewsDiff {
         String title = sides.size() >= 2 ? members(sides.get(0)) + (sides.get(0).members != null && sides.get(0).members.size() > 1 ? " declare" : " declares")
                 + " war on " + members(sides.get(1)) : "The " + name(war) + " begins";
         List<String> d = new ArrayList<>();
-        d.add("War: " + name(war) + (war.type == null || war.type.isBlank() ? "" : " (" + war.type + ")"));
+        boolean type = war.type != null && !war.type.isBlank();
+        d.add(sides.size() >= 2
+                ? tell(war.id, "The drums of war are beating. " + members(sides.get(0)) + (count(sides.get(0)) > 1 ? " have" : " has") + " declared war on " + members(sides.get(1)) + ", and the " + name(war) + " has begun.",
+                        "Steel is drawn and banners raised: " + members(sides.get(0)) + (count(sides.get(0)) > 1 ? " march" : " marches") + " against " + members(sides.get(1)) + ". The " + name(war) + " has begun.",
+                        "Diplomacy has failed. " + members(sides.get(0)) + (count(sides.get(0)) > 1 ? " have" : " has") + " declared war on " + members(sides.get(1)) + ", and the " + name(war) + " now begins.")
+                        + (type ? " It is a " + war.type + "." : "")
+                : "The " + name(war) + " has begun." + (type ? " It is a " + war.type + "." : ""));
         for (TerritoryFile.Side s : sides) d.add((s.name == null ? "Side" : s.name) + ": " + members(s));
         if (war.rule != null && !war.rule.isBlank()) d.add(war.rule);
         return news(News.Type.WAR, title, d, war.notes);
     }
 
     private static News ended(TerritoryFile.WarInfo war) {
+        List<TerritoryFile.Side> sides = nn(war.sides);
         List<String> d = new ArrayList<>();
-        for (TerritoryFile.Side s : nn(war.sides)) d.add((s.name == null ? "Side" : s.name) + ": " + members(s));
+        String span = span(war.started, war.ended);
+        String after = span != null ? " after " + span + " of war" : "";
+        String who = sides.size() >= 2 ? members(sides.get(0)) + " against " + members(sides.get(1)) : null;
+        d.add(tell(war.id, "The guns fall silent. The " + name(war) + " is over" + after + (who == null ? "." : ": " + who + "."),
+                "Peace at last. The " + name(war) + (who == null ? "" : ", which set " + who + ",") + " has come to an end" + after + ".",
+                "The banners are lowered and the soldiers go home: the " + name(war) + " is over" + after + "." + (who == null ? "" : " It was " + who + ".")));
+        for (TerritoryFile.Side s : sides) d.add((s.name == null ? "Side" : s.name) + ": " + members(s));
         if (war.started != null) d.add("From " + date(war.started) + " to " + date(war.ended));
         return news(News.Type.PEACE, "The " + name(war) + " is over", d, war.notes);
     }
@@ -117,9 +158,40 @@ public final class NewsDiff {
     private static News formed(TerritoryFile.AllianceInfo a) {
         List<String> names = nn(a.members).stream().filter(m -> m != null && m.name != null).map(m -> m.name).toList();
         List<String> d = new ArrayList<>();
+        String founders = names.isEmpty() ? "Its founders" : list(names);
+        d.add(tell(allianceName(a), "A new power rises. " + founders + " have joined hands to found the " + allianceName(a) + ".",
+                "Oaths are sworn and seals pressed: " + founders + " have founded the " + allianceName(a) + ".",
+                "The map shifts. " + founders + " now stand together as the " + allianceName(a) + "."));
         if (!names.isEmpty()) d.add("Members: " + list(names));
         if (a.formed != null && !a.formed.isBlank()) d.add("Formed " + a.formed);
         return news(News.Type.ALLIANCE, "The " + allianceName(a) + " is formed", d, a.notes);
+    }
+
+    /**
+     * The opening text of a news item, in the voice of a war-time newspaper. Which wording is picked follows from the seed (the war's id,
+     * the alliance's name, the fact's key), so the same news item always reads the same.
+     */
+    static String tell(String seed, String... versions) { return versions[Math.floorMod(seed.hashCode(), versions.length)]; }
+
+    private static String untilText(String iso) { return isDate(iso) ? " until " + date(iso) : ""; }
+    private static String onText(String iso) { return isDate(iso) ? " on " + date(iso) : ""; }
+
+    /** " It now has 3 members: A, B and C." (or nothing when the alliance is not in the file). */
+    private static String membersNow(TerritoryFile.AllianceInfo a) {
+        if (a == null) return "";
+        List<String> names = nn(a.members).stream().filter(m -> m != null && m.name != null).map(m -> m.name).toList();
+        return names.isEmpty() ? "" : " It now has " + names.size() + (names.size() == 1 ? " member: " : " members: ") + list(names) + ".";
+    }
+
+    private static int count(TerritoryFile.Side s) { return (int) nn(s.members).stream().filter(m -> m != null && m.name != null).count(); }
+
+    /** How long from one ISO time to another, in the world's units ("11 years"); null when either is missing or not ISO, or it is under a world day. */
+    private static String span(String from, String to) {
+        try { return WorldClock.span(java.time.Duration.between(Instant.parse(from), Instant.parse(to))); } catch (RuntimeException e) { return null; }
+    }
+
+    private static boolean isDate(String iso) {
+        try { Instant.parse(iso); return true; } catch (RuntimeException e) { return false; }
     }
 
     private static News news(News.Type type, String title, List<String> details, String notes) {
@@ -189,9 +261,9 @@ public final class NewsDiff {
 
     private static String until(String iso) { return iso == null || iso.equals("null") ? "No end date" : "Until " + date(iso); }
 
-    /** "15 Nov 2026 23:59 UTC", or the text as it is when it is not an ISO time ("790 AES"). */
+    /** The server's date for an ISO time ("December 30th, 904 AES"), or the text as it is when it is not an ISO time ("790 AES"). */
     static String date(String iso) {
-        try { return DATE.format(Instant.parse(iso)); } catch (RuntimeException e) { return iso; }
+        try { return clock.format(Instant.parse(iso)); } catch (RuntimeException e) { return iso; }
     }
 
     private static boolean past(String iso, Instant now) {

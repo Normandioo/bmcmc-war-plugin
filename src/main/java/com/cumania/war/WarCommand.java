@@ -439,6 +439,8 @@ final class WarCommand implements CommandExecutor, TabCompleter {
         say(sender, "War maps" + (list.isEmpty() && err == null ? "" : " (the site lists " + list.size() + " world" + (list.size() == 1 ? "" : "s")
                 + (err == null ? ")" : "; its last reading failed: " + err + ")")), NamedTextColor.GOLD);
         if (plugin.maps().isEmpty()) say(sender, "  None yet: the site's worlds list has not been read.", NamedTextColor.YELLOW);
+        double[] cost = plugin.tickCostMs();
+        say(sender, String.format(Locale.ROOT, "  The plugin's work on the game thread, once a second: %.2f ms on average, %.2f ms at worst (last minute).", cost[0], cost[1]), NamedTextColor.GRAY);
         long now = System.currentTimeMillis();
         for (WarMap m : plugin.maps()) {
             boolean here = BmcWarPlugin.worldOf(m) != null;

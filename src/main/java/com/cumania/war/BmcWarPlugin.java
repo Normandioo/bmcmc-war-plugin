@@ -55,6 +55,9 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         getServer().getMessenger().registerIncomingPluginChannel(this, com.cumania.war.sync.SyncMessages.CHANNEL, updates);
         updates.start();
         news = new NewsBoard(this);
+        menu = new NewsMenu(this);
+        dialog = new NewsDialog(this);
+        Bukkit.getPluginManager().registerEvents(menu, this);
         Bukkit.getPluginManager().registerEvents(news, this);
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
@@ -97,6 +100,12 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     /** Diplomatic news worked out from the site's diplomacy (/news). */
     private NewsBoard news;
     NewsBoard news() { return news; }
+    /** The news as a chest menu (experiment). */
+    private NewsMenu menu;
+    NewsMenu menu() { return menu; }
+    /** One news item as a window (how a news is read). */
+    private NewsDialog dialog;
+    NewsDialog dialog() { return dialog; }
 
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();
@@ -137,6 +146,7 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         if (!(Bukkit.getPluginManager().getPlugin("dynmap") instanceof org.dynmap.DynmapAPI))
             getLogger().warning("Dynmap was not found: captures work, but nothing is shown on the map and everything is forgotten on restart.");
         syncMaps(true);
+        if (news != null) news.loadClock();
     }
 
     // ----- The maps: found by themselves on the site's worlds.json, with the config's "maps" on top -----
@@ -471,8 +481,26 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         heightTried.keySet().removeIf(k -> k.startsWith(map.name + "|"));
     }
 
-    /** Once a second: who stands where, and what the clock does about it. */
+    /** What the plugin's once-a-second work cost the game thread, the last 60 times (nanoseconds). */
+    private final long[] tickCost = new long[60];
+    private int tickCount;
+
+    /** The cost of the last seconds of work: {average, worst} in milliseconds. */
+    double[] tickCostMs() {
+        int n = Math.min(tickCount, tickCost.length);
+        if (n == 0) return new double[]{0, 0};
+        long sum = 0, max = 0;
+        for (int i = 0; i < n; i++) { sum += tickCost[i]; max = Math.max(max, tickCost[i]); }
+        return new double[]{sum / (double) n / 1e6, max / 1e6};
+    }
+
     private void tick() {
+        long t0 = System.nanoTime();
+        try { work(); } finally { tickCost[tickCount++ % tickCost.length] = System.nanoTime() - t0; }
+    }
+
+    /** Once a second: who stands where, and what the clock does about it. */
+    private void work() {
         long now = System.nanoTime();
         double dt = Math.max(0.5, Math.min(5, (now - lastTick) / 1e9));
         lastTick = now;

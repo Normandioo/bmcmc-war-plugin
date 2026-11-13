@@ -27,6 +27,8 @@ final class WarMap {
     volatile long fetchedAt;
     volatile String error;
     volatile SiteData site;
+    /** What the last download answered (ETag) and said (a hash of its body): an answer that changes nothing is not worked on again. */
+    volatile String etag, bodyHash;
     Markers markers;
     DynmapMarkers dynmap;
     CaptureEngine engine;

@@ -286,6 +286,18 @@ public class WarCheck {
             }
         }
 
+        // 16. the front is worked out again only when it changed (the game thread pays for it every second)
+        icons.clear();
+        CaptureEngine cacheEng = new CaptureEngine(plain, MARKERS);
+        cacheEng.tick(site, war, List.of(), 1);
+        WarGraph first = cacheEng.graph(site, war);
+        cacheEng.tick(site, war, List.of(), 1);
+        check(cacheEng.graph(site, war) == first, "nothing changed: the same front is kept");
+        SiteData.City painted = site.cities().stream().filter(c -> site.sideOfCity(war, c) >= 0).findFirst().orElseThrow();
+        icons.put(painted.key(), (site.sideOfCity(war, painted) + 1) % 2);
+        cacheEng.tick(site, war, List.of(), 1);
+        check(cacheEng.graph(site, war) != first, "an icon changed by hand: the front is worked out again");
+
         System.out.println(failures == 0 ? "ALL OK" : failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }

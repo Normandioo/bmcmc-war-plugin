@@ -32,6 +32,8 @@ public final class NewsStore {
 
     private final Path file;
     private Saved s = new Saved();
+    private boolean dirty;   // something changed since the last save
+    private final Object disk = new Object();   // one write at a time, without holding the store's lock while the disk is busy
 
     public NewsStore(Path file) { this.file = file; }
 
@@ -51,11 +53,25 @@ public final class NewsStore {
         }
     }
 
-    public synchronized void save() throws Exception {
-        Files.createDirectories(file.getParent());
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");   // written whole first: a crash never leaves half a file
-        Files.writeString(tmp, GSON.toJson(s), StandardCharsets.UTF_8);
-        Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+    /** Writes news.json when something changed since the last time. The lock is held only to take the text, not while the disk writes it. */
+    public void save() throws Exception {
+        synchronized (disk) {
+            String json;
+            synchronized (this) {
+                if (!dirty) return;
+                json = GSON.toJson(s);
+                dirty = false;
+            }
+            try {
+                Files.createDirectories(file.getParent());
+                Path tmp = file.resolveSibling(file.getFileName() + ".tmp");   // written whole first: a crash never leaves half a file
+                Files.writeString(tmp, json, StandardCharsets.UTF_8);
+                Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception e) {
+                synchronized (this) { dirty = true; }   // tried again next time
+                throw e;
+            }
+        }
     }
 
     /**
@@ -73,15 +89,20 @@ public final class NewsStore {
 
     /** key = where the facts are kept (a map's site, or its posts). The first time a key is seen, its facts are only remembered. */
     private List<News> record(String key, String map, Set<String> facts, java.util.function.Function<Set<String>, List<News>> diff, Instant now, int keep) {
-        List<String> before = s.facts.put(key, new ArrayList<>(facts));
-        if (before == null) return List.of();
+        List<String> stored = new ArrayList<>(facts);
+        List<String> before = s.facts.put(key, stored);
+        if (before == null) { dirty = true; return List.of(); }
+        if (!before.equals(stored)) dirty = true;
         List<News> out = new ArrayList<>();
         for (News n : diff.apply(new TreeSet<>(before))) {
             News kept = n.withId(++s.lastId, map, now.toEpochMilli());
             s.items.add(kept);
             out.add(kept);
+            dirty = true;
         }
-        while (s.items.size() > Math.max(1, keep)) s.items.remove(0);
+        while (s.items.size() > Math.max(1, keep)) { s.items.remove(0); dirty = true; }
+        // someone who last read before the oldest kept news has all of them unread, the same as someone who never read: nothing to remember
+        if (!s.items.isEmpty()) { long oldest = s.items.get(0).id(); if (s.read.values().removeIf(seen -> seen < oldest)) dirty = true; }
         return out;
     }
 
@@ -99,5 +120,8 @@ public final class NewsStore {
     }
 
     /** The player has read everything there is now. */
-    public synchronized void markRead(String player) { s.read.put(player, s.lastId); }
+    public synchronized void markRead(String player) {
+        Long was = s.read.put(player, s.lastId);
+        if (was == null || was != s.lastId) dirty = true;
+    }
 }
