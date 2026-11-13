@@ -254,6 +254,7 @@ public final class NewsCheck {
         // long texts fill several pages
         List<String> parts = News.chunks("word ".repeat(200), 228);
         check("long text cut at spaces into pages", parts.size() == 5 && parts.stream().allMatch(p -> p.length() <= 228 && !p.startsWith(" ")));
+        check("a zero width does not hang", News.chunks("abc def", 0).size() == 6);
         check("one long word is cut too", News.chunks("x".repeat(500), 228).size() == 3);
 
         System.out.println(ok + "/" + (ok + failed) + " ok");

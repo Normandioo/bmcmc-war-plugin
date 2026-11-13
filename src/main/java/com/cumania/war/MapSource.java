@@ -124,12 +124,13 @@ final class MapSource {
         String url = worldsUrl();
         if (url.isEmpty()) return;
         try {
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").GET().build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode());
-            List<SiteWorld> read = parseWorlds(response.body());
+            HttpResponse<java.io.InputStream> response = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() != 200) { response.body().close(); throw new IllegalStateException("HTTP " + response.statusCode()); }
+            String text = body(response);
+            List<SiteWorld> read = parseWorlds(text);
             siteWorldsError = null;
             Files.createDirectories(worldsCache().getParent());
-            Files.writeString(worldsCache(), response.body());
+            Files.writeString(worldsCache(), text);
             if (read.equals(siteWorlds)) return;
             siteWorlds = read;
             CompletableFuture<Void> done = new CompletableFuture<>();
@@ -141,12 +142,17 @@ final class MapSource {
         }
     }
 
-    /** The text of a download, unzipped when the server sent it zipped. */
-    static String body(HttpResponse<byte[]> r) throws java.io.IOException {
-        byte[] b = r.body();
-        if (r.headers().firstValue("Content-Encoding").orElse("").equalsIgnoreCase("gzip"))
-            try (var in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(b))) { b = in.readAllBytes(); }
-        return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+    /** The most a download may be, zipped or not: a site that answers with something huge must not fill the server's memory. */
+    static final int MAX_BODY = 16 * 1024 * 1024;
+
+    /** The text of a download (read from a stream), unzipped when the server sent it zipped, and never more than MAX_BODY. */
+    static String body(HttpResponse<java.io.InputStream> r) throws java.io.IOException {
+        try (var raw = r.body()) {
+            var in = r.headers().firstValue("Content-Encoding").orElse("").equalsIgnoreCase("gzip") ? new java.util.zip.GZIPInputStream(raw) : raw;
+            byte[] b = in.readNBytes(MAX_BODY + 1);
+            if (b.length > MAX_BODY) throw new java.io.IOException("the answer is bigger than " + MAX_BODY / 1024 / 1024 + " MB");
+            return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        }
     }
 
     static String sha1(String text) {
@@ -162,9 +168,9 @@ final class MapSource {
             boolean first = m.fetchedAt == 0;   // the first download after the start always goes through: the cache it started from may be old
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("User-Agent", "bmc-war").header("Accept-Encoding", "gzip");
             if (!first && m.etag != null) request.header("If-None-Match", m.etag);
-            HttpResponse<byte[]> raw = http.send(request.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
-            if (raw.statusCode() == 304) { m.fetchedAt = System.currentTimeMillis(); m.error = null; return; }   // nothing changed
-            if (raw.statusCode() != 200) throw new IllegalStateException("HTTP " + raw.statusCode());
+            HttpResponse<java.io.InputStream> raw = http.send(request.GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+            if (raw.statusCode() == 304) { raw.body().close(); m.fetchedAt = System.currentTimeMillis(); m.error = null; return; }   // nothing changed
+            if (raw.statusCode() != 200) { raw.body().close(); throw new IllegalStateException("HTTP " + raw.statusCode()); }
             String text = body(raw);
             String hash = sha1(text);
             m.etag = raw.headers().firstValue("ETag").orElse(null);
