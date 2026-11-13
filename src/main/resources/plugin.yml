@@ -7,7 +7,12 @@ softdepend: [dynmap, Multiverse-Core]
 commands:
   bmcwar:
     description: Status of the wars, and staff tools
-    usage: /bmcwar status | where | table | debug | engagement [start <kind> [cities...] | go | pause | resume | stop] | undo [war] | log [war] [lines] | bridge [<bridge> open|close|site [force]] | set <city> <state> | reset [war] confirm | maps | reload
+    usage: /bmcwar status | where | table | debug | engagement [start <kind> [cities...] | go | pause | resume | stop] | undo [war] | log [war] [lines] | bridge [<bridge> open|close|site [force]] | set <city> <state> | reset [war] confirm | maps | news | reload
+    permission: bmcwar.use
+  news:
+    description: The diplomatic news - wars, alliances, truces, ultimatums and subjects, as they change on the site
+    usage: /news
+    aliases: [noticias]
     permission: bmcwar.use
 permissions:
   bmcwar.use:

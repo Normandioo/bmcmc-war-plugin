@@ -54,9 +54,13 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
         Bukkit.getPluginManager().registerEvents(updates, this);
         getServer().getMessenger().registerIncomingPluginChannel(this, com.cumania.war.sync.SyncMessages.CHANNEL, updates);
         updates.start();
+        news = new NewsBoard(this);
+        Bukkit.getPluginManager().registerEvents(news, this);
         WarCommand command = new WarCommand(this);
         var cmd = getCommand("bmcwar");
         if (cmd != null) { cmd.setExecutor(command); cmd.setTabCompleter(command); }
+        var newsCmd = getCommand("news");
+        if (newsCmd != null) newsCmd.setExecutor((sender, c, label, args) -> { news.open(sender); return true; });
         setup();
         lastTick = System.nanoTime();
         Bukkit.getScheduler().runTaskTimer(this, this::tick, 40L, 20L);
@@ -88,6 +92,9 @@ public final class BmcWarPlugin extends JavaPlugin implements org.bukkit.event.L
     private ModSync sync;
     /** New versions of the plugin (for the staff) and of the BMC Atlas mod (for players whose mod is old). */
     private UpdateNotices updates;
+    /** Diplomatic news worked out from the site's diplomacy (/news). */
+    private NewsBoard news;
+    NewsBoard news() { return news; }
 
     @Override public void onDisable() {
         if (ready != null) ready.stopAll();
