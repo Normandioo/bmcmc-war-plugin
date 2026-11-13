@@ -110,9 +110,14 @@ final class MapSource {
 
     /** Downloads the worlds list and every map's site data (off the game thread) and swaps each in when it reads. */
     void fetchSite() {
-        fetchWorlds();
-        for (WarMap m : new ArrayList<>(plugin.maps())) if (BmcWarPlugin.worldOf(m) != null) fetch(m);   // a map whose world is not on this server downloads nothing
+        if (!downloading.compareAndSet(false, true)) return;   // a slow site must not pile one round of downloads on top of the last
+        try {
+            fetchWorlds();
+            for (WarMap m : new ArrayList<>(plugin.maps())) if (BmcWarPlugin.worldOf(m) != null) fetch(m);   // a map whose world is not on this server downloads nothing
+        } finally { downloading.set(false); }
     }
+
+    private final java.util.concurrent.atomic.AtomicBoolean downloading = new java.util.concurrent.atomic.AtomicBoolean();
 
     /** The site's worlds list, read again: a world added or removed there becomes a map here, or stops being one. */
     private void fetchWorlds() {

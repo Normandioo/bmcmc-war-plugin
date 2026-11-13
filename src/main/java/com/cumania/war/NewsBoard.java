@@ -72,7 +72,13 @@ final class NewsBoard implements Listener {
      * bot), next to its territories.json. A small file, so it is read more often than the site's data. No file (404) = no posts yet.
      */
     void fetchPosts() {
-        if (!enabled()) return;
+        if (!enabled() || !readingPosts.compareAndSet(false, true)) return;   // a slow site must not pile one round on top of the last
+        try { readPosts(); } finally { readingPosts.set(false); }
+    }
+
+    private final java.util.concurrent.atomic.AtomicBoolean readingPosts = new java.util.concurrent.atomic.AtomicBoolean();
+
+    private void readPosts() {
         for (WarMap m : plugin.maps()) {
             if (BmcWarPlugin.worldOf(m) == null) continue;   // a map whose world is not here, like its site data
             String url = java.net.URI.create(m.url).resolve("news.json").toString();

@@ -37,7 +37,8 @@ import java.util.UUID;
  * If another plugin gives the player a different scoreboard meanwhile, the table steps aside instead of fighting over it.
  */
 final class CapitulationTable implements Listener {
-    private record Shown(Scoreboard own, Scoreboard original) {}
+    /** last: what the sidebar says now (one slot), so it is sent again only when it changes. */
+    private record Shown(Scoreboard own, Scoreboard original, View[] last) {}
 
     private final BmcWarPlugin plugin;
     private final Map<UUID, Shown> shown = new HashMap<>();
@@ -56,14 +57,17 @@ final class CapitulationTable implements Listener {
         Scoreboard original = p.getScoreboard();
         Scoreboard own = Bukkit.getScoreboardManager().getNewScoreboard();
         copyTeams(original, own);
-        shown.put(p.getUniqueId(), new Shown(own, original));
+        shown.put(p.getUniqueId(), new Shown(own, original, new View[1]));
         p.setScoreboard(own);
         update(p, new HashMap<>());
         return true;
     }
 
-    /** Every second: the teams copied again, and the table brought up to date. */
+    private int ticks;
+
+    /** Every second the table is brought up to date (and sent only if it changed); every 5 seconds the teams are copied again. */
     void tick() {
+        boolean copy = ticks++ % 5 == 0;   // tags change rarely: copying every team of every viewer each second costs more than it is worth
         Map<SiteData.War, View> views = new HashMap<>();   // worked out once per war, not once per player
         for (UUID id : new ArrayList<>(shown.keySet())) {
             Player p = Bukkit.getPlayer(id);
@@ -74,7 +78,7 @@ final class CapitulationTable implements Listener {
                 p.sendMessage(Component.text("The capitulation table was turned off: another plugin changed your scoreboard. /bmcwar table to show it again.", NamedTextColor.GRAY));
                 continue;
             }
-            copyTeams(s.original(), s.own());
+            if (copy) copyTeams(s.original(), s.own());
             update(p, views);
         }
     }
@@ -124,6 +128,10 @@ final class CapitulationTable implements Listener {
         Scoreboard board = s.own();
         Objective old = board.getObjective(DisplaySlot.SIDEBAR);
         View v = views.computeIfAbsent(pickWar(p), this::view);
+        View was = s.last()[0];
+        // with no engagement the table never changes: nothing is rebuilt or sent (it used to be, to every viewer, every second)
+        if (was != null && old != null && was.war() == v.war() && was.title().equals(v.title()) && was.rows().equals(v.rows())) return;
+        s.last()[0] = v;
 
         // Rebuilt each second on a fresh objective, then swapped in, so the sidebar does not flicker or keep stale rows
         String name = old != null && old.getName().equals(OBJECTIVE) ? OBJECTIVE + "2" : OBJECTIVE;
