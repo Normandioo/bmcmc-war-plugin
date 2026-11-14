@@ -35,7 +35,12 @@ public final class NewsStore {
     private boolean dirty;   // something changed since the last save
     private final Object disk = new Object();   // one write at a time, without holding the store's lock while the disk is busy
 
+    private volatile long maxAgeMillis;   // 0 = no age limit
+
     public NewsStore(Path file) { this.file = file; }
+
+    /** News older than this many days are dropped the next time news is recorded (0 = never). */
+    public void maxAgeDays(int days) { maxAgeMillis = Math.max(0, days) * 86_400_000L; }
 
     /** Reads news.json; an unreadable file starts over (and is kept aside as news.json.bad). */
     public synchronized void load() throws Exception {
@@ -101,6 +106,8 @@ public final class NewsStore {
             dirty = true;
         }
         while (s.items.size() > Math.max(1, keep)) { s.items.remove(0); dirty = true; }
+        long limit = maxAgeMillis;
+        if (limit > 0 && s.items.removeIf(n -> now.toEpochMilli() - n.time() > limit)) dirty = true;
         // someone who last read before the oldest kept news has all of them unread, the same as someone who never read: nothing to remember
         if (!s.items.isEmpty()) { long oldest = s.items.get(0).id(); if (s.read.values().removeIf(seen -> seen < oldest)) dirty = true; }
         return out;
