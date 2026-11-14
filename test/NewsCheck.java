@@ -233,6 +233,9 @@ public final class NewsCheck {
         again.observe("gaia", f, now, 2);
         again.observe("gaia", base, now, 2);
         check("only 'keep' news are kept, newest first", again.latest(10).size() == 2 && again.latest(10).get(0).id() == 4);
+        again.maxAgeDays(1);
+        again.observe("gaia", f, now.plusSeconds(2 * 86_400), 10);
+        check("news older than the age limit is dropped", again.latest(10).size() == 1 && again.latest(10).get(0).id() == 5);
         Files.writeString(dir.resolve("news.json"), "{ not json");
         boolean threw = false;
         try { new NewsStore(dir.resolve("news.json")).load(); } catch (Exception e) { threw = true; }

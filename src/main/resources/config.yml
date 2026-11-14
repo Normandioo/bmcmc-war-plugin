@@ -52,8 +52,9 @@ news:
   # How often (seconds) each map's news.json is read: the Staff's posts (/news post of the site's Discord bot), in the same folder as the
   # map's territories.json (https://bmcmc.online/gaia/news.json). A small file, so it is read more often than the site's data.
   posts-refresh-seconds: 60
-  # How many news are kept (the book shows the latest 30).
-  keep: 50
+  # How many news are kept, and for how many days (older ones go, even if there are fewer than keep; 0 = no age limit).
+  keep: 20
+  max-age-days: 14
   # Tell players who join how many news came out since they last opened /news.
   on-join: true
 

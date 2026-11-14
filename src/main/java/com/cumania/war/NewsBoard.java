@@ -41,6 +41,12 @@ final class NewsBoard implements Listener {
     /** The latest news, newest first. */
     List<News> latest(int n) { return store.latest(n); }
 
+    /** How many news are kept; also hands the store the age limit from the config. */
+    private int keep() {
+        store.maxAgeDays(plugin.getConfig().getInt("news.max-age-days", 14));
+        return plugin.getConfig().getInt("news.keep", 20);
+    }
+
     /** The server's calendar for the dates in the news (news.calendar), read at start and on /bmcwar reload. */
     void loadClock() {
         var c = plugin.getConfig();
@@ -52,7 +58,7 @@ final class NewsBoard implements Listener {
         if (!enabled()) return;
         List<News> fresh;
         try {
-            fresh = store.observe(m.name, TerritoryFile.parse(body), Instant.now(), plugin.getConfig().getInt("news.keep", 50));
+            fresh = store.observe(m.name, TerritoryFile.parse(body), Instant.now(), keep());
             store.save();
         } catch (Exception e) {
             plugin.getLogger().warning("[" + m.name + "] Could not work out the diplomatic news: " + e);
@@ -92,7 +98,7 @@ final class NewsBoard implements Listener {
                 if (response.statusCode() != 200 && response.statusCode() != 404) throw new IllegalStateException("HTTP " + response.statusCode());
                 response.headers().firstValue("ETag").ifPresentOrElse(t -> postTags.put(m.name, t), () -> postTags.remove(m.name));
                 List<NewsDiff.Post> posts = response.statusCode() == 404 ? List.of() : NewsDiff.parsePosts(MapSource.body(response));
-                List<News> fresh = store.observePosts(m.name, m.url, posts, Instant.now(), plugin.getConfig().getInt("news.keep", 50));
+                List<News> fresh = store.observePosts(m.name, m.url, posts, Instant.now(), keep());
                 if (postErrors.remove(m.name) != null) plugin.getLogger().info("[" + m.name + "] " + url + " can be read again.");
                 store.save();   // also the first reading, so a post made while the server is off is still news after a restart
                 if (fresh.isEmpty()) continue;
