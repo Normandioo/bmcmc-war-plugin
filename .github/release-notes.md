@@ -2,6 +2,9 @@ Paper 1.21.11 (Java 21). Put the jar in `plugins/` (replace the old one); dynmap
 
 **Not yet tested on a real server.** Try it with a test war first, with `bmcwar.bypass` for the staff, and check `/bmcwar where` and `/bmcwar status`.
 
+### New in 0.21.1
+- **News limits.** The plugin keeps the latest 20 news (`news.keep`, was 50) and drops any older than `news.max-age-days` (14 by default; 0 = no age limit). An existing `config.yml` keeps its old `keep: 50` until you change it. The site's Discord bot keeps the latest 20 Staff posts in `news.json` too.
+
 ### New in 0.21.0
 - **News in the BMC Atlas mod, with pictures.** The plugin sends the BMC Atlas client mod (1.8.0 and newer) the latest news when the player joins (`mod-sync.news`, 20) and each new one as it comes out. The mod pops new ones up in the top corner of the screen and lists them in its map's News panel, where a click opens the whole news with its picture.
 - **Pictures in the Staff's posts.** The site's Discord bot takes a PNG with `/news post image:`; the plugin turns it into a full address for the mod (the chat and the `/news` menu stay text only).
